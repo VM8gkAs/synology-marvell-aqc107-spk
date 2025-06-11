@@ -15,7 +15,6 @@ env:
   BASE_URL: "https://global.synologydownload.com/download/ToolChain"
   ARCHIVE_URL: "https://archive.synology.com/download/ToolChain"
   SPKSRC_REPO: "https://github.com/SynoCommunity/spksrc.git"
-  DRIVER_DIR: "drivers"
   # 25/06/11 資源網址
   # https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/7.2-72806
   # https://archive.synology.com/download/ToolChain/toolchain/7.2-72806
@@ -84,7 +83,8 @@ jobs:
 
       - name: 建立驅動目錄
         run: |
-          mkdir -p ${DRIVER_DIR}
+          mkdir -p driver
+          echo "DRIVER_DIR=${PWD}/driver" >> $GITHUB_ENV
 
       - name: 下載並解壓 Marvell AQC107 驅動 (25/06/11)
         run: |

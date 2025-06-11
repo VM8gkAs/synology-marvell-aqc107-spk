@@ -89,19 +89,24 @@ jobs:
       - name: 下載並解壓 Marvell AQC107 驅動 (25/06/11)
         run: |
           # 1) 下載並解壓
-          mkdir -p ${DRIVER_DIR}/${PKG_NAME}
-          PKG_VERSION=${AQC_ZIP_DIR##*_}
+          mkdir -p "${DRIVER_DIR}/${PKG_NAME}"
+
+          PKG_VERSION="${AQC_ZIP_DIR##*_}"   # → 2.5.12
           AQC_DRIVER_URL="https://www.marvell.com/content/dam/marvell/en/drivers/${AQC_ZIP_DIR}.zip"
 
-          wget -O marvell.zip "${AQC_DRIVER_URL}"
+          wget -q -O marvell.zip "${AQC_DRIVER_URL}"
+
+          # 只解出 atlantic.tar.gz
           unzip -j marvell.zip "${AQC_ZIP_DIR}/atlantic.tar.gz"
-          # atlantic 需要 去掉最外層的 Linux/ 目錄
+
+          # 把 Linux/ 這一層 strip 掉
           tar -xzf atlantic.tar.gz \
               --strip-components=1 \
               -C "${DRIVER_DIR}/${PKG_NAME}"
 
           # 2) 宣告 PKG_VERSION
           echo "PKG_VERSION=$PKG_VERSION" >> $GITHUB_ENV
+
       # ————— 編譯 —————
 
       # - name: 準備內核原始碼（生成 include/generated）
@@ -149,7 +154,7 @@ jobs:
         run: |
           cd ${DRIVER_DIR}/${PKG_NAME}/
 
-          FILE=${DRIVER_DIR}/${PKG_NAME}/aq_compat.h
+          FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
           
           # # redefinition of page_ref_count
           # if grep -q "page_ref_count(struct page" "$FILE"; then

@@ -157,20 +157,10 @@ jobs:
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
           
           # aq_compat.h 處理 page_ref_inc, page_ref_count
-          # 方法 1
-          # sed -i '107s/^/#if 0 \/* disabled on ≥4.4 *\/\n\/\//' "$FILE"
-          # 方法 2
-          # start=$(grep -n "static inline void page_ref_inc" "$FILE" | cut -d: -f1)
-          # end=$(tail -n +"$start" "$FILE" | grep -n -m1 '^}' | cut -d: -f1)
-          # end=$((start+end-1))
-          # sed -i "${start},${end}d" "$FILE"
-          # start=$(grep -n "static inline int page_ref_count" "$FILE" | cut -d: -f1)
-          # end=$(tail -n +"$start" "$FILE" | grep -n -m1 '^}' | cut -d: -f1)
-          # end=$((start+end-1))
-          sed -i "${start},${end}d" "$FILE"
 
-          sed -i '/static inline int page_ref_count/,/^#endif/c\
-          #endif' "$FILE"
+          sed -i '/static inline int page_ref_count/,/^#endif/{c\
+          #endif\
+          }' "$FILE"
 
 
           # 編譯

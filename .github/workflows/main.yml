@@ -149,12 +149,12 @@ jobs:
         run: |
           cd ${DRIVER_DIR}/${PKG_NAME}/
 
+          FILE=${DRIVER_DIR}/${PKG_NAME}/aq_compat.h
+          
           # # redefinition of page_ref_count
-          # FILE=${DRIVER_DIR}/${PKG_NAME}/aq_compat.h
           # if grep -q "page_ref_count(struct page" "$FILE"; then
           #   sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
           # fi
-
           # 若函式存在而且還沒 #ifndef，就動手包起來
           if grep -q "static inline int page_ref_count" "$FILE" && \
             ! grep -q "#ifndef page_ref_count" "$FILE"; then

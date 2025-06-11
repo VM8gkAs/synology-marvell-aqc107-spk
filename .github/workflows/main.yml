@@ -135,7 +135,7 @@ jobs:
           make -j2 -C ../../linux-${KERNEL_VER} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${PKG_NAME}-${PKG_VERSION}-ko
           path: atlantic/Linux/*.ko
@@ -162,7 +162,7 @@ jobs:
                GCC_DIR=${TOOLCHAIN_DIR}/bin
 
       - name: 上傳產出的 .spk
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${PKG_NAME}-${PKG_VERSION}.spk
           path: spksrc/spk/${ARCH}/output/${PKG_NAME}-${PKG_VERSION}-${ARCH}.spk

@@ -156,17 +156,18 @@ jobs:
 
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
           
-          # redefinition of page_ref_count
-          # if grep -q "page_ref_count(struct page" "$FILE"; then
-          #   sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
-          # fi
-          sed -i '116,119c\
-          #ifndef page_ref_count\n\
-          static inline int page_ref_count(struct page *page)\n\
-          {\n\
-                  return atomic_read(&page->_count);\n\
-          }\n\
-          #endif /* page_ref_count */' "$FILE"
+          # 處理 page_ref_count
+          # 方法 1
+          # sed -i '107s/^/#if 0 \/* disabled on ≥4.4 *\/\n\/\//' "$FILE"
+          # 方法 2
+          start=$(grep -n "static inline void page_ref_inc" "$FILE" | cut -d: -f1)
+          end=$(tail -n +"$start" "$FILE" | grep -n -m1 '^}' | cut -d: -f1)
+          end=$((start+end-1))
+          sed -i "${start},${end}d" "$FILE"
+          start=$(grep -n "static inline int page_ref_count" "$FILE" | cut -d: -f1)
+          end=$(tail -n +"$start" "$FILE" | grep -n -m1 '^}' | cut -d: -f1)
+          end=$((start+end-1))
+          sed -i "${start},${end}d" "$FILE"
 
           # 編譯
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules

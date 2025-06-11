@@ -108,10 +108,10 @@ static inline u64 mul_u32_u32(u32 a, u32 b)
 
 #if !(RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE > RHEL_RELEASE_VERSION(7, 2)))
 /* from commit fe896d1878949ea92ba547587bc3075cc688fb8f */
-static inline void page_ref_inc(struct page *page)
-{
-	atomic_inc(&page->_count);
-}
+// static inline void page_ref_inc(struct page *page)
+// {
+// 	atomic_inc(&page->_count);
+// }
 
 // static inline int page_ref_count(struct page *page)
 // {

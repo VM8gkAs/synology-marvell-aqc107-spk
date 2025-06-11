@@ -23,13 +23,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      SRC_DIR: $RUNNER_TEMP/syno-build
+      SRC_DIR: ${{ runner.temp }}/build_syno
     defaults:
       run:
         working-directory: ${{ env.SRC_DIR }}
     steps:
       # ————— 準備 —————
-
+      
       - name: 建立工作目錄
         run: mkdir -p $SRC_DIR
 

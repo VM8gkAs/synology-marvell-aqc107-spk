@@ -157,10 +157,11 @@ jobs:
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
           
           # aq_compat.h 處理 page_ref_inc, page_ref_count
-
           sed -i '/static inline int page_ref_count/,/^#endif/c\
           #endif /* page_ref_count fallback removed */\
           ' "$FILE"
+
+          # sed -i '/static inline int page_ref_count/,/^#endif/c\#endif\' "$FILE"
 
           # 編譯
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
@@ -179,7 +180,8 @@ jobs:
       - name: 複製 .ko 到 spksrc 專案
         run: |
           mkdir -p spksrc/packages/driver/${PKG_NAME}/dl
-          cp atlantic/Linux/atlantic.ko spksrc/packages/driver/${PKG_NAME}/dl/
+          cp "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
+             "spksrc/packages/driver/${PKG_NAME}/dl/"
 
       - name: 更新 spksrc 中的版本號
         run: |

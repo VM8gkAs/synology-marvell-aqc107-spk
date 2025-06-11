@@ -145,22 +145,26 @@ jobs:
           make -j$(nproc) prepare
           make -j$(nproc) scripts
 
-      - name: Apply compatibility patch
-        run: |
-          FILE=${DRIVER_DIR}/${PKG_NAME}/Linux/aq_compat.h
-          if grep -q "page_ref_count(struct page" "$FILE"; then
-            sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
-          fi
-
-      - name: 編譯 AQC107 模組
+      - name: 編譯模組 AQC107
         run: |
           cd ${DRIVER_DIR}/${PKG_NAME}/
-          # redefinition of page_ref_count
-          FILE=${DRIVER_DIR}/${PKG_NAME}/aq_compat.h
-          if grep -q "page_ref_count(struct page" "$FILE"; then
-            sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
+
+          # # redefinition of page_ref_count
+          # FILE=${DRIVER_DIR}/${PKG_NAME}/aq_compat.h
+          # if grep -q "page_ref_count(struct page" "$FILE"; then
+          #   sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
+          # fi
+
+          # 若函式存在而且還沒 #ifndef，就動手包起來
+          if grep -q "static inline int page_ref_count" "$FILE" && \
+            ! grep -q "#ifndef page_ref_count" "$FILE"; then
+
+            # 在函式前插入 #ifndef；在函式結束後插入 #endif
+            sed -i '/static inline int page_ref_count/i #ifndef page_ref_count' "$FILE"
+            sed -i '/^}$/a #endif /* page_ref_count */' "$FILE"
           fi
 
+          # 編譯
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts

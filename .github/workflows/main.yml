@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./build_syno  # = $GITHUB_WORKSPACE/build_syno
+        working-directory: build_syno  # = $GITHUB_WORKSPACE/build_syno
     steps:
       # ————— 準備 —————
 

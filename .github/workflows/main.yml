@@ -145,9 +145,22 @@ jobs:
           make -j$(nproc) prepare
           make -j$(nproc) scripts
 
+      - name: Apply compatibility patch
+        run: |
+          FILE=${DRIVER_DIR}/${PKG_NAME}/Linux/aq_compat.h
+          if grep -q "page_ref_count(struct page" "$FILE"; then
+            sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
+          fi
+
       - name: 編譯 AQC107 模組
         run: |
           cd ${DRIVER_DIR}/${PKG_NAME}/
+          # redefinition of page_ref_count
+          FILE=${DRIVER_DIR}/${PKG_NAME}/aq_compat.h
+          if grep -q "page_ref_count(struct page" "$FILE"; then
+            sed -i '/page_ref_count(struct page/{x;s/^/#ifndef page_ref_count/;x;};$a #endif' "$FILE"
+          fi
+
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts

@@ -156,7 +156,7 @@ jobs:
 
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
           
-          # aq_compat.h 處理 page_ref_inc, page_ref_count
+          # aq_compat.h 處理 page_ref_count
           sed -i '/static inline int page_ref_count/,/^#endif/c\
           #endif /* page_ref_count fallback removed */\
           ' "$FILE"
@@ -183,13 +183,14 @@ jobs:
           cp "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
              "spksrc/packages/driver/${PKG_NAME}/dl/"
 
-      - name: 更新 spksrc 中的版本號
-        run: |
-          sed -i "s/^VERSION *= .*/VERSION = ${PKG_VERSION}/" spksrc/packages/driver/${PKG_NAME}/Makefile
-
       - name: 建置 SPK 套件
         run: |
           cd spksrc
+          ./create_spk.sh "atlantic" driver
+          # 更新 spksrc 中的版本號
+          sed -i "s/^VERSION *= .*/VERSION = ${PKG_VERSION}/" \
+              spksrc/packages/driver/atlantic/Makefile
+          # 打包
           make arch-${ARCH} PACKAGE=${PKG_NAME} \
                TOOLCHAIN_DIR=${TOOLCHAIN_DIR} \
                GCC_DIR=${TOOLCHAIN_DIR}/bin

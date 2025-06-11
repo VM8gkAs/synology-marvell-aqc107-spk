@@ -6,13 +6,14 @@ on:
   workflow_dispatch:
 
 env:
-  BASE_URL: "https://global.synologydownload.com/download/ToolChain"
   DSM_TAG: "7.2-72806" # DSM 7.2.2-72806 Update 3
   CPU_SERIES: "v1000" # DS1821+ v1000 x86_64
   ARCH: "x86_64"
   KERNEL_VER: "4.4.302" # DS1821+ DSM7.2 對應的內核版本
   PKG_NAME: "atlantic"
   AQC_ZIP_DIR: "07-18-24_Marvell_Linux_2.5.12"
+  BASE_URL: "https://global.synologydownload.com/download/ToolChain"
+  ARCHIVE_URL: "https://archive.synology.com/download/ToolChain"
   SPKSRC_REPO: "https://github.com/SynoCommunity/spksrc.git"
   # 25/06/11 資源網址
   # https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/7.2-72806
@@ -56,7 +57,7 @@ jobs:
           
       - name: 下載並解壓 Synology 交叉編譯工具鏈 (25/06/11)
         run: |
-          TOOLCHAIN_FOLDER="${BASE_URL}/toolchain/${DSM_TAG}"
+          TOOLCHAIN_FOLDER="${ARCHIVE_URL}/toolchain/${DSM_TAG}"
           echo "Listing platform dirs in: $TOOLCHAIN_FOLDER"
 
           # 1) 抓出 href

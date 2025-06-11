@@ -22,16 +22,22 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      SRC_DIR: ${{ runner.temp }}/build_syno
     defaults:
       run:
-        working-directory: ${{ env.SRC_DIR }}
+        working-directory: ./build_syno  # = $GITHUB_WORKSPACE/build_syno
     steps:
       # ————— 準備 —————
-      
+
       - name: 建立工作目錄
-        run: mkdir -p $SRC_DIR
+        run: mkdir -p build_syno
+
+      - name: Pull kernel-config-append
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1                 # 僅取最新 commit
+          sparse-checkout: |             # ← 指定要留下的路徑
+            kernel-config-append/aqc107.cfg
+          sparse-checkout-cone-mode: false
 
       - name: 安裝編譯依賴
         run: |
@@ -54,7 +60,6 @@ jobs:
           tar xJf linux-${KERNEL_VER_MAJOR_MINOR}.x.txz
           
       - name: 下載並解壓 Synology 交叉編譯工具鏈 (25/06/11)
-        shell: bash
         run: |
           TOOLCHAIN_FOLDER="${BASE_URL}/toolchain/${DSM_TAG}"
           echo "Listing platform dirs in: $TOOLCHAIN_FOLDER"

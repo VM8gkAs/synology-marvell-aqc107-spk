@@ -158,10 +158,9 @@ jobs:
           
           # aq_compat.h 處理 page_ref_inc, page_ref_count
 
-          sed -i '/static inline int page_ref_count/,/^#endif/{c\
-          #endif\
-          }' "$FILE"
-
+          sed -i '/static inline int page_ref_count/,/^#endif/c\
+          #endif /* page_ref_count fallback removed */\
+          ' "$FILE"
 
           # 編譯
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules

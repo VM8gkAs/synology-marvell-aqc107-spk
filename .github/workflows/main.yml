@@ -1,0 +1,168 @@
+name: Build & Package Marvell AQC107 Driver for DS1821+
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BASE_URL: "https://global.synologydownload.com/download/ToolChain"
+  DSM_TAG: "7.2-72806" # DSM 7.2.2-72806 Update 3
+  CPU_SERIES: "v1000" # DS1821+ v1000 x86_64
+  ARCH: "x86_64"
+  KERNEL_VER: "4.4.302" # DS1821+ DSM7.2 對應的內核版本
+  PKG_NAME: "atlantic"
+  AQC_ZIP_DIR: "07-18-24_Marvell_Linux_2.5.12"
+  SPKSRC_REPO: "https://github.com/SynoCommunity/spksrc.git"
+  # 25/06/11 資源網址
+  # https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/7.2-72806
+  # https://archive.synology.com/download/ToolChain/toolchain/7.2-72806
+  # https://www.marvell.com/support/downloads.html
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SRC_DIR: $RUNNER_TEMP/syno-build
+    defaults:
+      run:
+        working-directory: ${{ env.SRC_DIR }}
+    steps:
+      # ————— 準備 —————
+
+      - name: 建立工作目錄
+        run: mkdir -p $SRC_DIR
+
+      - name: 安裝編譯依賴
+        run: |
+          sudo apt-get update && sudo apt-get install -y xz-utils bc build-essential wget unzip git
+
+      - name: 解析 Kernel 版本 (Extracts X and X.Y from X.Y.Z)
+        run: |
+          KERNEL_VER_MAJOR=${KERNEL_VER%%.*}
+          KERNEL_VER_MAJOR_MINOR=${KERNEL_VER%.*}
+
+      # - name: 下載官方 Linux 原始碼（補齊 generated/）
+      #   run: |
+      #     # https://mirrors.edge.kernel.org/pub/linux/kernel/v4.x/linux-4.4.302.tar.gz
+      #     wget -O linux-${KERNEL_VER}.tar.gz "https://mirrors.edge.kernel.org/pub/linux/kernel/v${KERNEL_VER_MAJOR}.x/linux-${KERNEL_VER}.tar.gz"
+      #     tar zxvf linux-${KERNEL_VER}.tar.gz
+
+      - name: 下載並解壓 Synology 內核原始碼 (25/06/11)
+        run: |
+          wget -O linux-${KERNEL_VER_MAJOR_MINOR}.x.txz "${BASE_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_MAJOR_MINOR}.x.txz"
+          tar xJf linux-${KERNEL_VER_MAJOR_MINOR}.x.txz
+          
+      - name: 下載並解壓 Synology 交叉編譯工具鏈 (25/06/11)
+        shell: bash
+        run: |
+          TOOLCHAIN_FOLDER="${BASE_URL}/toolchain/${DSM_TAG}"
+          echo "Listing platform dirs in: $TOOLCHAIN_FOLDER"
+
+          # 1) 抓出 href
+          TOOLCHAIN_URL=$(wget -qO- "$TOOLCHAIN_FOLDER/" \
+            | grep -Po '(?<=href=")[^"]+' \
+            | grep -i "$KERNEL_VER" \
+            | grep -i "$CPU_SERIES" \
+            | grep -i "$ARCH" \
+            | head -n1)
+          echo "Raw href: $TOOLCHAIN_URL"
+
+          # 2) 判斷絕對/相對
+          if [[ "$TOOLCHAIN_URL" =~ ^https?:// ]]; then
+            echo "Detected absolute URL."
+          else
+            TOOLCHAIN_URL="${TOOLCHAIN_FOLDER}/${TOOLCHAIN_URL}"
+            echo "Detected relative URL; resolved to $TOOLCHAIN_URL"
+          fi
+
+          # 3) 下載並解壓
+          wget -O toolchain.txz "$TOOLCHAIN_URL"
+          tar xJf toolchain.txz
+
+      - name: 下載並解壓 Marvell AQC107 驅動 (25/06/11)
+        run: |
+          PKG_VERSION=${AQC_ZIP_DIR##*_}
+          AQC_DRIVER_URL="https://www.marvell.com/content/dam/marvell/en/drivers/${AQC_ZIP_DIR}.zip"
+
+          wget -O marvell.zip "${AQC_DRIVER_URL}"
+          # unzip marvell.zip
+          unzip -j marvell.zip "${AQC_ZIP_DIR}/atlantic.tar.gz"
+          tar zxvf atlantic.tar.gz
+
+      # ————— 編譯 —————
+
+      # - name: 準備內核原始碼（生成 include/generated）
+      #   run: |
+      #     cd linux-${KERNEL_VER}
+      #     make oldconfig
+      #     make prepare
+      #     cd ..
+
+      # - name: 設定交叉編譯環境變數
+      #   run: |
+      #     echo "ARCH=${ARCH}" >> $GITHUB_ENV
+
+      - name: 啟動 Synology 內核編譯功能
+        run: |
+          # 1) 切換目錄到 linux-${KERNEL_VER_MAJOR_MINOR}.x
+          cd linux-${KERNEL_VER_MAJOR_MINOR}.x
+          
+          # 2) 拷貝官方 synoconfigs 基礎 config
+          cp synoconfigs/${CPU_SERIES} .config
+
+          # 3) 用 merge_config.sh 合併你的 cfg
+          scripts/kconfig/merge_config.sh .config ../kernel-config-append/aqc107.cfg
+          make oldconfig # 用 oldconfig 跳過交互，自動處理 Kconfig 依賴?
+
+          # 4) 修改 Makefile ( EXTRAVERSION = to EXTRAVERSION = + )
+          sed -i "s/EXTRAVERSION = /EXTRAVERSION = +/g" Makefile
+
+          # 5) 宣告環境變數 TOOLCHAIN_DIR 和 CROSS_COMPILE
+          echo "TOOLCHAIN_DIR=../${ARCH}-pc-linux-gnu/" >> $GITHUB_ENV
+          echo "CROSS_COMPILE=../${ARCH}-pc-linux-gnu/bin/{ARCH}-pc-linux-gnu-" >> $GITHUB_ENV
+
+          # 6) 準備編譯
+          make clean
+          # make -j2 CROSS_COMPILE=../${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu- prepare
+          # make -j2 CROSS_COMPILE=../${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu- scripts
+          make -j2 prepare
+          make -j2 scripts
+
+      - name: 編譯 AQC107 模組
+        run: |
+          cd atlantic/Linux
+          make -j2 -C ../../linux-${KERNEL_VER} M=$PWD modules
+
+      - name: 上傳 .ko 模組為 Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${PKG_NAME}-${PKG_VERSION}-ko
+          path: atlantic/Linux/*.ko
+
+      # ————— 開始打包成 SPK —————
+
+      - name: Clone spksrc 框架
+        run: git clone --depth 1 ${SPKSRC_REPO} spksrc
+
+      - name: 複製 .ko 到 spksrc 專案
+        run: |
+          mkdir -p spksrc/packages/driver/${PKG_NAME}/dl
+          cp atlantic/Linux/atlantic.ko spksrc/packages/driver/${PKG_NAME}/dl/
+
+      - name: 更新 spksrc 中的版本號
+        run: |
+          sed -i "s/^VERSION *= .*/VERSION = ${PKG_VERSION}/" spksrc/packages/driver/${PKG_NAME}/Makefile
+
+      - name: 建置 SPK 套件
+        run: |
+          cd spksrc
+          make arch-{ARCH} PACKAGE=${PKG_NAME} \
+               TOOLCHAIN_DIR=${TOOLCHAIN_DIR} \
+               GCC_DIR=${TOOLCHAIN_DIR}/bin
+
+      - name: 上傳產出的 .spk
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${PKG_NAME}-${PKG_VERSION}.spk
+          path: spksrc/spk/${ARCH}/output/${PKG_NAME}-${PKG_VERSION}-${ARCH}.spk

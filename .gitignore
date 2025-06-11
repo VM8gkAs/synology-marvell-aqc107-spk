@@ -3,7 +3,7 @@
 
 # Object files
 *.o
-*.ko
+# *.ko
 *.obj
 *.elf
 
@@ -50,3 +50,30 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# ---------------------------------------
+# Synology
+# ---------------------------------------
+
+# archive
+*.txz
+*.tar.gz
+*.zip
+
+# spksrc
+spksrc/spk/
+spksrc/work/
+spksrc/pkg/
+spksrc/bin/
+
+# GitHub Actions cache
+.github/workflows/.cache/
+
+# log、patch
+*.log
+*.patch
+
+# IDE
+.vscode/
+*.swp
+*~

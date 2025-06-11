@@ -22,9 +22,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: build_syno  # = $GITHUB_WORKSPACE/build_syno
     steps:
       # ————— 準備 —————
 
@@ -41,7 +38,7 @@ jobs:
       - name: Set REPO_URL and Download essential files
         run: |
           # 1) 設定 REPO_URL 並下載 aqc107.cfg
-          MY_REPO_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}"
+          MY_REPO_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main"
           curl -L -o aqc107.cfg ${MY_REPO_URL}/kernel-config-append/aqc107.cfg
           # 2) 宣告 REPO_URL
           echo "REPO_URL=${MY_REPO_URL}" >> $GITHUB_ENV

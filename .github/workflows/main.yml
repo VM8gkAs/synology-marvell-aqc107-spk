@@ -1,19 +1,34 @@
-name: Build & Package Marvell AQC107 Driver for DS1821+
+name: Build & Package Marvell AQC107 2.5.12 Driver
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      dsm_ver_full:
+        description: "完整 DSM build number"
+        required: false
+        default: "7.2.2-72806-3"
+      build_json:
+        description: "機型清單 (逗號分隔或 JSON 陣列)"
+        required: false
+        default: >
+          [{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]
+          # DS1821+, RS3618xs, RS4021xs+, RS820RP+, DS3617xsII, DS216+II, DS1517
+          # [{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"},
+          #  {"device":"ds920plus","cpu_series":"geminilake","arch":"x86_64"},
+          #  {"device":"ds423","cpu_series":"rtd1619b","arch":"armv8"}]
 
 env:
-  DSM_TAG: "7.2-72806" # DSM 7.2.2-72806 Update 3
-  CPU_SERIES: "v1000" # DS1821+ v1000 x86_64
-  ARCH: "x86_64"
-  KERNEL_VER: "4.4.302" # DS1821+ DSM7.2 對應的內核版本
   PKG_NAME: "atlantic"
+  PKG_VERSION: "2.5.12"
   AQC_ZIP_DIR: "07-18-24_Marvell_Linux_2.5.12"
-  BASE_URL: "https://global.synologydownload.com/download/ToolChain"
-  ARCHIVE_URL: "https://archive.synology.com/download/ToolChain"
+  NAS_CPU_LIST_URL: "https://kb.synology.com/en-global/DSM/tutorial/What_kind_of_CPU_does_my_NAS_have"
+  BASE_URL: "https://global.synologydownload.com/download"
+  BASE_TC_URL: "https://global.synologydownload.com/download/ToolChain"
+  ARCHIVE_URL: "https://archive.synology.com/download"
+  ARCHIVE_TC_URL: "https://archive.synology.com/download/ToolChain"
+  ARCHIVE_OS_URL: "https://archive.synology.com/download/Os/DSM"
   SPKSRC_REPO: "https://github.com/SynoCommunity/spksrc.git"
   # 資源網址 250611 更新
   # https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/7.2-72806
@@ -22,18 +37,129 @@ env:
 
 jobs:
   build:
+    # ≡ 空字串 → 跑全部；"ALL" → 跑全部；其他 → 僅跑列在 build_queue 中的機種 ≡
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # matrix: ${{ fromJSON(inputs.build_json) }}
+      matrix: 
+        include: ${{ fromJSON(inputs.build_json) }}
+    name: Build - ${{ matrix.device }}
+    env:
+      WORKDIR: ${{ github.workspace }}/work-${{ matrix.device }}
+      DRIVER_DIR: ${{ github.workspace }}/work-${{ matrix.device }}/driver-${{ matrix.device }}
+      CPU_SERIES: ${{ matrix.cpu_series }}
+      ARCH: ${{ matrix.arch }}
+      DSM_VER_FULL: ${{ inputs.dsm_ver_full }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}/work-${{ matrix.device }}
     steps:
       # —————————— 準備 ——————————
+      - name: Initialize Folder
+        run: |
+          mkdir -p "$WORKDIR" "$DRIVER_DIR"
+          echo "workdir=$WORKDIR"
+          ls -al "$WORKDIR"
+
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y xz-utils bc build-essential wget unzip git
 
+      - name: Get NAS specific information
+        run: |
+          # ds1821plus → ds1821+ / rs2423rpplus → rs2423rp+
+          MODEL="$(echo "${{ matrix.device }}" | sed 's/plus$/+/')"
+
+          # 驗證 MODEL 與 CPU_SERIES
+          CPU_SERIES_FINDED=$(wget -qO- "$NAS_CPU_LIST_URL" \
+            | grep -A1 "<td>$MODEL</td>" \
+            | tail -1 \
+            | sed 's/.*<td>\(.*\)<\/td>.*/\1/')
+          if [ -z "$CPU_SERIES_FINDED" ]; then
+            echo "Error: Could not find CPU_SERIES for '$MODEL'. Please check the input or device in build_json."
+            exit 1
+          fi
+          if [ "$CPU_SERIES_FINDED" != "$CPU_SERIES" ]; then
+            echo "Warning: CPU_SERIES for '$MODEL' should be '$CPU_SERIES_FINDED'. Please check the input or device in build_json."
+            echo "CPU_SERIES=$CPU_SERIES_FINDED" >> $GITHUB_ENV
+          fi
+
+          # 繼續宣告 機型 別名
+          # ds1821+ → ds
+          MODEL_SERIES="$(echo "${MODEL}" | sed 's/^\([a-z][a-z]\).*/\1/')"
+          # ds1821+ → 1821+
+          MODEL_SUB="$(echo "${MODEL}" | sed 's/^[a-z][a-z]//')"
+          # ds1821+ → DS1821+ / ds416play → DS416play
+          # MODEL_UPPER="$(echo "${MODEL_SERIES}" | tr '[:lower:]' '[:upper:]')${MODEL_SUB}"
+          echo "MODEL=${MODEL}" >> $GITHUB_ENV
+
+          # 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
+          OS_WEBFOLDER="${ARCHIVE_OS_URL}${DSM_VER_FULL_SHORT}"
+          # $DSM_VER_FULL is not exist
+          status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "$OS_WEBFOLDER")
+          if [ -z "$DSM_VER_FULL" ] || [ $status_code -ne 200 ]; then
+            echo "Error: $DSM_VER_FULL is not exist. Will use latest version."
+            # DSM_VER_FULL → [6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?
+            DSM_VER_FULL_FINDED=$(curl -sL "$ARCHIVE_OS_URL" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
+            echo "DSM_VER_FULL=$DSM_VER_FULL_FINDED" >> $GITHUB_ENV
+            # OS_WEBFOLDER="${ARCHIVE_OS_URL}${DSM_VER_FULL_FINDED}"
+          fi
+          # 計算 DSM 版本別名
+          # Check DSM_VER_FULL is major version or minor version
+          # 7.2.2-72806 is major version / 7.2.2-72806-3 is minor version
+          IS_MAJOR_VER=false
+          if [[ $(grep -o '-' <<< "$DSM_VER_FULL" | wc -l) -eq 2 ]]; then
+            IS_MAJOR_VER=false
+          else
+            IS_MAJOR_VER=true
+          fi
+          if $IS_MAJOR_VER; then
+            # 7.2.2-72806 = DSM_VER_FULL = DSM_MAIN_VER-DSM_VER
+            # 7.2-72806 = DSM_VER_FULL_SHORT = DSM_MAIN_MAJOR_VER-DSM_VER
+            DSM_MAIN_VER="${DSM_VER_FULL%-*}" # 7.2.2
+            DSM_VER="${DSM_VER_FULL#*-}" # 72806
+            DSM_PATCH_VER=""
+            DSM_VER_FULL_SHORT="${DSM_MAIN_VER}-${DSM_VER}" # 7.2-72806
+            DSM_TAG="${DSM_VER_FULL_SHORT}" # 7.2-72806
+          else
+            # 7.2.2-72806-3 = DSM_VER_FULL = DSM_MAIN_VER-DSM_VER-DSM_PATCH_VER
+            # 7.2-72806-3 = DSM_VER_FULL_SHORT = DSM_MAIN_MAJOR_VER-DSM_VER-DSM_PATCH_VER
+            DSM_MAIN_VER="${DSM_VER_FULL%-*}" # 7.2.2
+            DSM_VER="${DSM_VER_FULL#*-}" # 72806
+            DSM_PATCH_VER="${DSM_VER_FULL_SHORT##*-}"# 3
+            DSM_VER_FULL_SHORT="${DSM_MAIN_VER%.*}-${DSM_VER}-${DSM_PATCH_VER}" # 7.2-72806-3
+            DSM_TAG="${DSM_VER_FULL%.*}-${DSM_VER}" # 7.2-72806
+          fi
+          echo "DSM_TAG=${DSM_TAG}" >> $GITHUB_ENV
+
+          # 驗證 $ARCH (藉由 TOOLCHAIN_WEBFOLDER)
+          TOOLCHAIN_WEBFOLDER="${ARCHIVE_TC_URL}/toolchain/${DSM_TAG}"
+          TOOLCHAIN_WEBFOLDER_CONTENT=${curl -sL "${TOOLCHAIN_WEBFOLDER}/"}
+          TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
+                              grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
+                              head -n1)
+          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
+          echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
+          if [ "$ARCH_FINDED" != "$ARCH" ]; then
+            echo "Warning: ARCH for '$MODEL' should be '$ARCH_FINDED'. Please check the input or device in build_json."
+            echo "ARCH=$ARCH_FINDED" >> $GITHUB_ENV
+          fi
+          # 方便之後下載
+          TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
+          echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> $GITHUB_ENV
+
+          # 計算 Kernel 版本號
+          # TOOLCHAIN_URL = https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
+          KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/')
+          echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
+
       - name: Extract Kernel version
         run: |
-          # 宣告 KERNEL_VER_MAJOR 和 KERNEL_VER_MAJOR_MINOR (Extract X and X.Y from X.Y.Z)
-          echo "KERNEL_VER_MAJOR=${KERNEL_VER%%.*}"  >> $GITHUB_ENV
-          echo "KERNEL_VER_MAJOR_MINOR=${KERNEL_VER%.*}" >> $GITHUB_ENV
+          # 宣告 KERNEL_VER_MAJOR 和 KERNEL_VER_SERIES (Extract 4 and 4.4 from 4.4.302)
+          echo "KERNEL_VER_MAJOR=${KERNEL_VER%%.*}" >> $GITHUB_ENV
+          echo "KERNEL_VER_SERIES=${KERNEL_VER%.*}" >> $GITHUB_ENV
 
       - name: Set REPO_URL and Download essential files
         run: |
@@ -49,62 +175,52 @@ jobs:
       #     wget -O linux-${KERNEL_VER}.tar.gz "https://mirrors.edge.kernel.org/pub/linux/kernel/v${KERNEL_VER_MAJOR}.x/linux-${KERNEL_VER}.tar.gz"
       #     tar zxvf linux-${KERNEL_VER}.tar.gz
 
-      - name: 下載並解壓 Synology 內核原始碼 (25/06/11)
+      - name: 下載並解壓 Synology 內核原始碼 Source (25/06/11)
         run: |
-          wget -O linux-${KERNEL_VER_MAJOR_MINOR}.x.txz "${BASE_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_MAJOR_MINOR}.x.txz"
-          tar xJf linux-${KERNEL_VER_MAJOR_MINOR}.x.txz
+          wget -O linux-${KERNEL_VER_SERIES}.x.txz "${BASE_TC_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_SERIES}.x.txz"
+          tar xJf linux-${KERNEL_VER_SERIES}.x.txz
 
-      - name: 下載並解壓 Synology 交叉編譯工具鏈 (25/06/11)
+      - name: 下載並解壓 Synology 交叉編譯工具鏈 ToolChain (25/06/11)
         run: |
-          TOOLCHAIN_FOLDER="${ARCHIVE_URL}/toolchain/${DSM_TAG}"
-          echo "Listing platform dirs in: $TOOLCHAIN_FOLDER"
+          # TOOLCHAIN_WEBFOLDER="${ARCHIVE_TC_URL}/toolchain/${DSM_TAG}"
+          # echo "Listing platform dirs in: $TOOLCHAIN_WEBFOLDER"
 
-          # 1) 抓出 href
-          TOOLCHAIN_URL=$(wget -qO- "$TOOLCHAIN_FOLDER/" \
-            | grep -Po '(?<=href=")[^"]+' \
-            | grep -i "$KERNEL_VER" \
-            | grep -i "$CPU_SERIES" \
-            | grep -i "$ARCH" \
-            | head -n1)
-          echo "Raw href: $TOOLCHAIN_URL"
+          # # 1) 抓出 href
+          # TOOLCHAIN_URL=$(wget -qO- "$TOOLCHAIN_WEBFOLDER/" \
+          #   | grep -Po '(?<=href=")[^"]+' \
+          #   | grep -i "$KERNEL_VER" \
+          #   | grep -i "$CPU_SERIES" \
+          #   | grep -i "$ARCH" \
+          #   | head -n1)
+          # echo "Raw href: $TOOLCHAIN_URL"
 
-          # 2) 判斷絕對/相對
-          if [[ "$TOOLCHAIN_URL" =~ ^https?:// ]]; then
-            echo "Detected absolute URL."
-          else
-            TOOLCHAIN_URL="${TOOLCHAIN_FOLDER}/${TOOLCHAIN_URL}"
-            echo "Detected relative URL; resolved to $TOOLCHAIN_URL"
-          fi
+          # # 2) 判斷絕對/相對
+          # if [[ "$TOOLCHAIN_URL" =~ ^https?:// ]]; then
+          #   echo "Detected absolute URL."
+          # else
+          #   TOOLCHAIN_URL="${TOOLCHAIN_WEBFOLDER}/${TOOLCHAIN_URL}"
+          #   echo "Detected relative URL; resolved to $TOOLCHAIN_URL"
+          # fi
 
-          # 3) 下載並解壓
-          wget -O toolchain.txz "$TOOLCHAIN_URL"
+          # https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
+          # 下載並解壓
+          wget -O toolchain.txz "${TOOLCHAIN_URL}"
           tar xJf toolchain.txz
 
-      - name: 建立驅動目錄
-        run: |
-          mkdir -p driver
-          echo "DRIVER_DIR=${PWD}/driver" >> $GITHUB_ENV
-
-      - name: 下載並解壓 Marvell AQC107 驅動 (25/06/11)
+      - name: 下載並解壓 驅動 Marvell AQC107 (25/06/11)
         run: |
           # 1) 下載並解壓
           mkdir -p "${DRIVER_DIR}/${PKG_NAME}"
-
-          PKG_VERSION="${AQC_ZIP_DIR##*_}"   # → 2.5.12
           AQC_DRIVER_URL="https://www.marvell.com/content/dam/marvell/en/drivers/${AQC_ZIP_DIR}.zip"
-
           wget -q -O marvell.zip "${AQC_DRIVER_URL}"
 
-          # 只解出 atlantic.tar.gz
+          # 2) 只解出 atlantic.tar.gz
           unzip -j marvell.zip "${AQC_ZIP_DIR}/atlantic.tar.gz"
 
-          # 把 Linux/ 這一層 strip 掉
+          # 3) 把 Linux/ 這一層 strip 掉
           tar -xzf atlantic.tar.gz \
               --strip-components=1 \
               -C "${DRIVER_DIR}/${PKG_NAME}"
-
-          # 2) 宣告 PKG_VERSION
-          echo "PKG_VERSION=$PKG_VERSION" >> $GITHUB_ENV
 
       # —————————— 編譯 ——————————
       # - name: 準備內核原始碼（生成 include/generated）
@@ -121,7 +237,7 @@ jobs:
       - name: 啟動 Synology 內核編譯功能
         run: |
           # 1) 宣告環境變數 TOOLCHAIN_DIR 和 CROSS_COMPILE
-          echo "KERNEL_SRC=${PWD}/linux-${KERNEL_VER_MAJOR_MINOR}.x" >> $GITHUB_ENV
+          echo "KERNEL_SRC=${PWD}/linux-${KERNEL_VER_SERIES}.x" >> $GITHUB_ENV
           echo "TOOLCHAIN_DIR=${PWD}/${ARCH}-pc-linux-gnu/" >> $GITHUB_ENV
           # CROSS_COMPILE_PATH="${PWD}/${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu-"
           # echo "CROSS_COMPILE_ENV=${CROSS_COMPILE_PATH}" >> $GITHUB_ENV
@@ -129,7 +245,7 @@ jobs:
           echo "${PWD}/${ARCH}-pc-linux-gnu/bin" >> $GITHUB_PATH     # gcc 放進 PATH
 
           # 2) 切換目錄
-          cd linux-${KERNEL_VER_MAJOR_MINOR}.x
+          cd linux-${KERNEL_VER_SERIES}.x
 
           # 3) 拷貝官方 synoconfigs 基礎 config
           cp synoconfigs/${CPU_SERIES} .config
@@ -153,14 +269,13 @@ jobs:
           # 1) 切換目錄 
           cd ${DRIVER_DIR}/${PKG_NAME}/
 
-          FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
-
           # 2) aq_compat.h 處理 page_ref_count
+          FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
+          # sed -i '/static inline int page_ref_count/,/^#endif/c\
+          # #endif /* page_ref_count fallback removed */\
+          # ' "$FILE"
           sed -i '/static inline int page_ref_count/,/^#endif/c\
-          #endif /* page_ref_count fallback removed */\
-          ' "$FILE"
-
-          # sed -i '/static inline int page_ref_count/,/^#endif/c\#endif\' "$FILE"
+          #endif /* page_ref_count fallback removed */' "$FILE"
 
           # 3) 編譯
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
@@ -168,12 +283,15 @@ jobs:
       - name: 上傳 .ko 模組為 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${PKG_NAME}-${PKG_VERSION}-ko
-          path: ${DRIVER_DIR}/${PKG_NAME}/*.ko
+          name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-ko
+          path: ${{ env.DRIVER_DIR }}/${{ env.PKG_NAME }}/*.ko
+          if-no-files-found: error
 
       # —————————— 開始打包成 SPK ——————————
       - name: Clone spksrc 框架
-        run: git clone --depth 1 ${SPKSRC_REPO} spksrc
+        run: |
+          # git clone --depth 1 ${SPKSRC_REPO} spksrc
+          git clone --branch master --single-branch ${SPKSRC_REPO} spksrc
 
       # - name: 建置 SPK 套件
       #   run: |
@@ -193,9 +311,11 @@ jobs:
           cd spksrc
 
           # 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
-          # 會放進 lib/modules/KERNEL_VER/
+          # 會放進 lib/modules/$KERNEL_VER/
           # 2) 建立 driver 套件骨架（spk/atlantic）
-          ./mk/spksrc.create.sh driver/atlantic
+          # ./mk/spksrc.create.sh driver/atlantic
+          ls mk/
+          bash ./mk/spksrc.create.sh driver/atlantic
 
           # 3) 建立模組目的資料夾並複製
           install -D \
@@ -222,5 +342,5 @@ jobs:
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
-          name: "${PKG_NAME}-${PKG_VERSION}.spk"
-          path: "spksrc/output/${ARCH}/${PKG_NAME}-${PKG_VERSION}-${ARCH}.spk"
+          name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}.spk"
+          path: "spksrc/output/${{ env.ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.ARCH }}.spk"

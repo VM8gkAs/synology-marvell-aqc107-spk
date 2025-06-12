@@ -20,12 +20,6 @@ on:
           #  {"device":"ds423","cpu_series":"rtd1619b","arch":"armv8"}]
 
 env:
-  BUILD_JSON_DEFAULT: >
-    [{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]
-    # DS1821+, RS3618xs, RS4021xs+, RS820RP+, DS3617xsII, DS216+II, DS1517
-    # [{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"},
-    #  {"device":"ds920plus","cpu_series":"geminilake","arch":"x86_64"},
-    #  {"device":"ds423","cpu_series":"rtd1619b","arch":"armv8"}]
   PKG_NAME: "atlantic"
   PKG_VERSION: "2.5.12"
   AQC_ZIP_DIR: "07-18-24_Marvell_Linux_2.5.12"
@@ -48,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        include: ${{ fromJSON(inputs.build_json || env.BUILD_JSON_DEFAULT) }}
+         include: ${{ fromJSON( inputs.build_json || '[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]' ) }}
     name: Build - ${{ matrix.device }}
     env:
       DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}

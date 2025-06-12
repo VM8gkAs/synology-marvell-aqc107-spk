@@ -64,6 +64,9 @@ jobs:
 
       - name: Get NAS specific information
         run: |
+          set -ex
+          trap 'echo "::error::失敗於 ${BASH_SOURCE}:${LINENO} - 指令: $BASH_COMMAND"' ERR
+
           # ds1821plus → ds1821+ / rs2423rpplus → rs2423rp+
           MODEL="$(echo "${{ matrix.device }}" | sed 's/plus$/+/')"
 
@@ -188,6 +191,7 @@ jobs:
             exit 78
           fi
           echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
+        continue-on-error: true
 
       - name: Extract Kernel version
         run: |

@@ -134,10 +134,12 @@ jobs:
           TOOLCHAIN_WEBFOLDER="${ARCHIVE_TC_URL}/toolchain/${DSM_TAG}"
 
           # 目錄是否存在？
-          if ! curl -fsI "$TOOLCHAIN_WEBFOLDER/" >/dev/null; then
-          echo "::warning::$TOOLCHAIN_WEBFOLDER 不存在"; exit 0; fi
-          TOOLCHAIN_WEBFOLDER_CONTENT=$(curl -sL "${TOOLCHAIN_WEBFOLDER}/")
+          if ! curl -fsI "$TOOLCHAIN_WEBFOLDER/" >/dev/null ; then
+            echo "::warning::$TOOLCHAIN_WEBFOLDER 不存在，跳過此機種"
+            exit 78          # → GitHub 會標記為 neutral，不算錯誤
+          fi
 
+          TOOLCHAIN_WEBFOLDER_CONTENT=$(curl -sL "${TOOLCHAIN_WEBFOLDER}/")
           # TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
           #                     grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
           #                     head -n1)

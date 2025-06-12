@@ -93,6 +93,7 @@ jobs:
           echo "MODEL=${MODEL}" >> $GITHUB_ENV
 
           # 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
+          DSM_VER_FULL_SHORT="$(echo "$DSM_VER_FULL" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+-(.*)$/\1-\2/')"
           OS_WEBFOLDER="${ARCHIVE_OS_URL}${DSM_VER_FULL_SHORT}"
           # $DSM_VER_FULL is not exist
           status_code=$(curl -o /dev/null -s -w "%{http_code}\n" "$OS_WEBFOLDER")
@@ -101,6 +102,7 @@ jobs:
             # DSM_VER_FULL → [6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?
             DSM_VER_FULL=$(curl -sL "$ARCHIVE_OS_URL" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
             echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_ENV
+            DSM_VER_FULL_SHORT="$(echo "$DSM_VER_FULL" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+-(.*)$/\1-\2/')"
           fi
           # 計算 DSM 版本別名
           # Check DSM_VER_FULL is major version or minor version
@@ -132,7 +134,7 @@ jobs:
 
           # 驗證 $ARCH (藉由 TOOLCHAIN_WEBFOLDER)
           TOOLCHAIN_WEBFOLDER="${ARCHIVE_TC_URL}/toolchain/${DSM_TAG}"
-          TOOLCHAIN_WEBFOLDER_CONTENT=${curl -sL "${TOOLCHAIN_WEBFOLDER}/"}
+          TOOLCHAIN_WEBFOLDER_CONTENT=$(curl -sL "${TOOLCHAIN_WEBFOLDER}/")
           TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
                               grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
                               head -n1)

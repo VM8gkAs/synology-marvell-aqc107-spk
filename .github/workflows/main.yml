@@ -94,7 +94,7 @@ jobs:
 
           # 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
           OS_INDEX=$(curl -fsSL "$ARCHIVE_OS_URL") || {
-            echo "::error::無法取得 DSM 索引頁"; exit 1; }
+            echo "::error::無法取得 DSM 索引頁"; exit 78; }
           # $DSM_VER_FULL is not exist
           if ! grep -Fq "$DSM_VER_FULL" <<< "$OS_INDEX"; then
             echo "Error: ${DSM_VER_FULL} is not exist. Will use latest version."
@@ -158,7 +158,7 @@ jobs:
 
           if [ -z "$ARCH_FINDED" ]; then
             echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"
-            exit 1
+            exit 78
           fi
 
           if [ "$ARCH_FINDED" != "$ARCH" ]; then
@@ -185,7 +185,7 @@ jobs:
           KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/' || true)
           if [ -z "$KERNEL_VER" ]; then
             echo "::error::抓不到 Kernel 版本，TOOLCHAIN_URL=$TOOLCHAIN_URL"
-            exit 1 # 或 exit 0 跳過此機種
+            exit 78 # 或 exit 0 跳過此機種
           fi
           echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
 

@@ -15,17 +15,16 @@ env:
   BASE_URL: "https://global.synologydownload.com/download/ToolChain"
   ARCHIVE_URL: "https://archive.synology.com/download/ToolChain"
   SPKSRC_REPO: "https://github.com/SynoCommunity/spksrc.git"
-  # 25/06/11 資源網址
+  # 資源網址 250611 更新
   # https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/7.2-72806
   # https://archive.synology.com/download/ToolChain/toolchain/7.2-72806
   # https://www.marvell.com/support/downloads.html
-  
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # ————— 準備 —————
-
+      # —————————— 準備 ——————————
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y xz-utils bc build-essential wget unzip git
@@ -35,7 +34,7 @@ jobs:
           # 宣告 KERNEL_VER_MAJOR 和 KERNEL_VER_MAJOR_MINOR (Extract X and X.Y from X.Y.Z)
           echo "KERNEL_VER_MAJOR=${KERNEL_VER%%.*}"  >> $GITHUB_ENV
           echo "KERNEL_VER_MAJOR_MINOR=${KERNEL_VER%.*}" >> $GITHUB_ENV
-          
+
       - name: Set REPO_URL and Download essential files
         run: |
           # 1) 設定 REPO_URL 並下載 aqc107.cfg
@@ -54,7 +53,7 @@ jobs:
         run: |
           wget -O linux-${KERNEL_VER_MAJOR_MINOR}.x.txz "${BASE_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_MAJOR_MINOR}.x.txz"
           tar xJf linux-${KERNEL_VER_MAJOR_MINOR}.x.txz
-          
+
       - name: 下載並解壓 Synology 交叉編譯工具鏈 (25/06/11)
         run: |
           TOOLCHAIN_FOLDER="${ARCHIVE_URL}/toolchain/${DSM_TAG}"
@@ -107,8 +106,7 @@ jobs:
           # 2) 宣告 PKG_VERSION
           echo "PKG_VERSION=$PKG_VERSION" >> $GITHUB_ENV
 
-      # ————— 編譯 —————
-
+      # —————————— 編譯 ——————————
       # - name: 準備內核原始碼（生成 include/generated）
       #   run: |
       #     cd linux-${KERNEL_VER}
@@ -130,9 +128,9 @@ jobs:
           echo "CROSS_COMPILE=${PWD}/${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu-" >> $GITHUB_ENV
           echo "${PWD}/${ARCH}-pc-linux-gnu/bin" >> $GITHUB_PATH     # gcc 放進 PATH
 
-          # 2) 切換目錄到 linux-${KERNEL_VER_MAJOR_MINOR}.x
+          # 2) 切換目錄
           cd linux-${KERNEL_VER_MAJOR_MINOR}.x
-          
+
           # 3) 拷貝官方 synoconfigs 基礎 config
           cp synoconfigs/${CPU_SERIES} .config
 
@@ -152,18 +150,19 @@ jobs:
 
       - name: 編譯模組 AQC107
         run: |
+          # 1) 切換目錄 
           cd ${DRIVER_DIR}/${PKG_NAME}/
 
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
-          
-          # aq_compat.h 處理 page_ref_count
+
+          # 2) aq_compat.h 處理 page_ref_count
           sed -i '/static inline int page_ref_count/,/^#endif/c\
           #endif /* page_ref_count fallback removed */\
           ' "$FILE"
 
           # sed -i '/static inline int page_ref_count/,/^#endif/c\#endif\' "$FILE"
 
-          # 編譯
+          # 3) 編譯
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts
@@ -172,31 +171,56 @@ jobs:
           name: ${PKG_NAME}-${PKG_VERSION}-ko
           path: ${DRIVER_DIR}/${PKG_NAME}/*.ko
 
-      # ————— 開始打包成 SPK —————
-
+      # —————————— 開始打包成 SPK ——————————
       - name: Clone spksrc 框架
         run: git clone --depth 1 ${SPKSRC_REPO} spksrc
 
-      - name: 複製 .ko 到 spksrc 專案
-        run: |
-          mkdir -p spksrc/packages/driver/${PKG_NAME}/dl
-          cp "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
-             "spksrc/packages/driver/${PKG_NAME}/dl/"
+      # - name: 建置 SPK 套件
+      #   run: |
+      #     cd spksrc
+      #     ./create-local-package.sh driver/atlantic
+      #     # 更新 spksrc 中的版本號
+      #     sed -i "s/^VERSION *= .*/VERSION = ${PKG_VERSION}/" \
+      #         spksrc/spk/driver/atlantic/Makefile
+      #     # 打包
+      #     make arch-${ARCH} PACKAGE=${PKG_NAME} \
+      #          TOOLCHAIN_DIR=${TOOLCHAIN_DIR} \
+      #          GCC_DIR=${TOOLCHAIN_DIR}/bin
 
-      - name: 建置 SPK 套件
+      - name: 建立 SPK 骨架 and 複製 .ko
+        run: |
+          # 1) 切換目錄
+          cd spksrc
+
+          # 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
+          # 會放進 lib/modules/KERNEL_VER/
+          # 2) 建立 driver 套件骨架（spk/atlantic）
+          ./mk/spksrc.create.sh driver/atlantic
+
+          # 3) 建立模組目的資料夾並複製
+          install -D \
+            "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
+            "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
+
+          # 4) 更新版本號
+          sed -i "s/^PKG_VERS.*/PKG_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
+          # 或模板是 VERSION 的話請改成：sed -i 's/^VERSION.*/VERSION = .../'
+
+      - name: 下載工具鏈 (一次性節省後續 cache)
         run: |
           cd spksrc
-          ./create_spk.sh "atlantic" driver
-          # 更新 spksrc 中的版本號
-          sed -i "s/^VERSION *= .*/VERSION = ${PKG_VERSION}/" \
-              spksrc/packages/driver/atlantic/Makefile
-          # 打包
-          make arch-${ARCH} PACKAGE=${PKG_NAME} \
-               TOOLCHAIN_DIR=${TOOLCHAIN_DIR} \
-               GCC_DIR=${TOOLCHAIN_DIR}/bin
+          make setup
+
+      - name: 建置 .spk
+        run: |
+          # 1) 切換目錄
+          cd spksrc
+          # 2) TCVERSION - DSM 主版號 7.x, arch - CPU 架構
+          TCVERSION=${DSM_TAG%-*}
+          make TCVERSION=${TCVERSION} arch-${ARCH} package-${PKG_NAME}
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
-          name: ${PKG_NAME}-${PKG_VERSION}.spk
-          path: spksrc/spk/${ARCH}/output/${PKG_NAME}-${PKG_VERSION}-${ARCH}.spk
+          name: "${PKG_NAME}-${PKG_VERSION}.spk"
+          path: "spksrc/output/${ARCH}/${PKG_NAME}-${PKG_VERSION}-${ARCH}.spk"

@@ -46,7 +46,6 @@ jobs:
         include: ${{ fromJSON(inputs.build_json) }}
     name: Build - ${{ matrix.device }}
     env:
-      WORKDIR: ${{ github.workspace }}/work-${{ matrix.device }}
       DRIVER_DIR: ${{ github.workspace }}/work-${{ matrix.device }}/driver-${{ matrix.device }}
       CPU_SERIES: ${{ matrix.cpu_series }}
       ARCH: ${{ matrix.arch }}
@@ -54,14 +53,11 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: ${{ github.workspace }}/work-${{ matrix.device }}
     steps:
       # —————————— 準備 ——————————
       - name: Initialize Folder
         run: |
-          mkdir -p "$WORKDIR" "$DRIVER_DIR"
-          echo "workdir=$WORKDIR"
-          ls -al "$WORKDIR"
+          mkdir -p "$DRIVER_DIR"
 
       - name: Install dependencies
         run: |

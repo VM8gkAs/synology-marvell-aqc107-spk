@@ -103,7 +103,7 @@ jobs:
             DSM_VER_FULL_SHORT="$(echo "$DSM_VER_FULL" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+-(.*)$/\1-\2/')"
             DSM_VER_FULL_TEST=true
           fi
-          if !${DSM_VER_FULL_TEST} || ! echo "$OS_INDEX" | grep -Fq "$DSM_VER_FULL"; then
+          if ! ${DSM_VER_FULL_TEST} || ! echo "$OS_INDEX" | grep -Fq "$DSM_VER_FULL"; then
             echo "Error: $DSM_VER_FULL is not exist. Will use latest version."
             DSM_VER_FULL=$(echo "$OS_INDEX" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
             echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_ENV

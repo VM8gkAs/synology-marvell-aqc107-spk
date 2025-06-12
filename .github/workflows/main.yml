@@ -74,7 +74,7 @@ jobs:
             | sed 's/.*<td>\(.*\)<\/td>.*/\1/')
           if [ -z "$CPU_SERIES_FINDED" ]; then
             echo "Error: Could not find CPU_SERIES for '$MODEL'. Please check the input or device in build_json."
-            # exit 1
+            # exit 78
             echo "::warning::CPU_SERIES for $MODEL not found, skip validation"
           fi
           if [ "$CPU_SERIES_FINDED" != "$CPU_SERIES" ]; then
@@ -148,7 +148,7 @@ jobs:
                               head -n1 || true)
           if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
             echo "::warning::找不到 $CPU_SERIES 的 toolchain 於 $DSM_TAG，跳過此機種"
-            exit 0            # 或者改成 exit 78 讓整條 CI 不算失敗
+            exit 78
           fi
 
           # ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
@@ -185,7 +185,7 @@ jobs:
           KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/' || true)
           if [ -z "$KERNEL_VER" ]; then
             echo "::error::抓不到 Kernel 版本，TOOLCHAIN_URL=$TOOLCHAIN_URL"
-            exit 78 # 或 exit 0 跳過此機種
+            exit 78
           fi
           echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
 

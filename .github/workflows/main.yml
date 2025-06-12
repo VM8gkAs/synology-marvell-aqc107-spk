@@ -168,12 +168,15 @@ jobs:
           TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
           echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> $GITHUB_ENV
 
-          # 計算 Kernel 版本號
+          # 取 Kernel 版本
           # TOOLCHAIN_URL = https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
-          KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/')
-          echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
+          # KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/')
           KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/' || true)
-          [ -z "$KERNEL_VER" ] && { echo "::error::抓不到 Kernel 版本"; exit 1; }
+          if [ -z "$KERNEL_VER" ]; then
+            echo "::error::抓不到 Kernel 版本，TOOLCHAIN_URL=$TOOLCHAIN_URL"
+            exit 1 # 或 exit 0 跳過此機種
+          fi
+          echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
 
       - name: Extract Kernel version
         run: |

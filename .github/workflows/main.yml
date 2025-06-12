@@ -167,8 +167,17 @@ jobs:
             echo "ARCH=$ARCH" >> $GITHUB_ENV
           fi
           # 方便之後下載
-          TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
-          echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> $GITHUB_ENV
+          # TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
+
+          TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" \
+                  | grep -B2 "$TOOLCHAIN_FILE_NAME" \
+                  | grep -oP '<a href="\K[^"]+' \
+                  | head -n1 || true)
+          if [ -z "$TOOLCHAIN_URL" ]; then
+            echo "::warning::抓不到下載網址，跳過 $MODEL"
+            exit 78      # neutral
+          fi
+          echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> "$GITHUB_ENV"
 
           # 取 Kernel 版本
           # TOOLCHAIN_URL = https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz

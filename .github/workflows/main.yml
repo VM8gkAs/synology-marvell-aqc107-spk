@@ -93,9 +93,8 @@ jobs:
           echo "MODEL=${MODEL}" >> $GITHUB_ENV
 
           # 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
-          OS_INDEX=$(curl -sL "$ARCHIVE_OS_URL") || {
-            echo "::error::無法取得索引頁"
-          }
+          OS_INDEX=$(curl -fsSL "$ARCHIVE_OS_URL") || {
+            echo "::error::無法取得 DSM 索引頁"; exit 1; }
           # $DSM_VER_FULL is not exist
           if ! grep -Fq "$DSM_VER_FULL" <<< "$OS_INDEX"; then
             echo "Error: ${DSM_VER_FULL} is not exist. Will use latest version."
@@ -133,12 +132,32 @@ jobs:
 
           # 驗證 $ARCH (藉由 TOOLCHAIN_WEBFOLDER)
           TOOLCHAIN_WEBFOLDER="${ARCHIVE_TC_URL}/toolchain/${DSM_TAG}"
-          TOOLCHAIN_WEBFOLDER_CONTENT=$(curl -sL "${TOOLCHAIN_WEBFOLDER}/")
+          
+          # TOOLCHAIN_WEBFOLDER_CONTENT=$(curl -sL "${TOOLCHAIN_WEBFOLDER}/")
+          if ! curl -fsI "$TOOLCHAIN_WEBFOLDER/" >/dev/null; then
+          echo "::warning::$TOOLCHAIN_WEBFOLDER 不存在"; exit 0; fi
+
+          # TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
+          #                     grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
+          #                     head -n1)
           TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
                               grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
-                              head -n1)
-          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
-          echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
+                              head -n1 || true)
+          if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
+            echo "::warning::找不到 $CPU_SERIES 的 toolchain 於 $DSM_TAG，跳過此機種"
+            exit 0            # 或者改成 exit 78 讓整條 CI 不算失敗
+          fi
+
+          # ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
+          # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
+          # ---------- ARCH_FINDED ----------
+          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/' || true)
+
+          if [ -z "$ARCH_FINDED" ]; then
+            echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"
+            exit 1
+          fi
+
           if [ "$ARCH_FINDED" != "$ARCH" ]; then
             echo "Warning: ARCH for '$MODEL' should be '$ARCH_FINDED'. Please check the input or device in build_json."
             ARCH=${ARCH_FINDED}
@@ -152,6 +171,8 @@ jobs:
           # TOOLCHAIN_URL = https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
           KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/')
           echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
+          KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/' || true)
+          [ -z "$KERNEL_VER" ] && { echo "::error::抓不到 Kernel 版本"; exit 1; }
 
       - name: Extract Kernel version
         run: |

@@ -79,7 +79,8 @@ jobs:
           fi
           if [ "$CPU_SERIES_FINDED" != "$CPU_SERIES" ]; then
             echo "Warning: CPU_SERIES for '$MODEL' should be '$CPU_SERIES_FINDED'. Please check the input or device in build_json."
-            echo "CPU_SERIES=$CPU_SERIES_FINDED" >> $GITHUB_ENV
+            CPU_SERIES=${CPU_SERIES_FINDED}
+            echo "CPU_SERIES=$CPU_SERIES" >> $GITHUB_ENV
           fi
 
           # 繼續宣告 機型 別名
@@ -98,9 +99,8 @@ jobs:
           if [ -z "$DSM_VER_FULL" ] || [ $status_code -ne 200 ]; then
             echo "Error: $DSM_VER_FULL is not exist. Will use latest version."
             # DSM_VER_FULL → [6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?
-            DSM_VER_FULL_FINDED=$(curl -sL "$ARCHIVE_OS_URL" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
-            echo "DSM_VER_FULL=$DSM_VER_FULL_FINDED" >> $GITHUB_ENV
-            # OS_WEBFOLDER="${ARCHIVE_OS_URL}${DSM_VER_FULL_FINDED}"
+            DSM_VER_FULL=$(curl -sL "$ARCHIVE_OS_URL" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
+            echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_ENV
           fi
           # 計算 DSM 版本別名
           # Check DSM_VER_FULL is major version or minor version
@@ -140,7 +140,8 @@ jobs:
           echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           if [ "$ARCH_FINDED" != "$ARCH" ]; then
             echo "Warning: ARCH for '$MODEL' should be '$ARCH_FINDED'. Please check the input or device in build_json."
-            echo "ARCH=$ARCH_FINDED" >> $GITHUB_ENV
+            ARCH=${ARCH_FINDED}
+            echo "ARCH=$ARCH" >> $GITHUB_ENV
           fi
           # 方便之後下載
           TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)

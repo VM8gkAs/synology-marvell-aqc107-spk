@@ -48,7 +48,7 @@ jobs:
       DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}
       CPU_SERIES: ${{ matrix.cpu_series }}
       ARCH: ${{ matrix.arch }}
-      DSM_VER_FULL: ${{ inputs.dsm_ver_full }}
+      DSM_VER_FULL: ${{ inputs.dsm_ver_full || '7.2.2-72806-3' }}
     defaults:
       run:
         shell: bash
@@ -93,22 +93,15 @@ jobs:
           echo "MODEL=${MODEL}" >> $GITHUB_ENV
 
           # 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
-          DSM_VER_FULL_TEST=false
-          OS_INDEX=$(curl -sL "$ARCHIVE_OS_URL")
+          OS_INDEX=$(curl -sL "$ARCHIVE_OS_URL") || {
+            echo "::error::無法取得索引頁"
+          }
           # $DSM_VER_FULL is not exist
-          if [ -z "$DSM_VER_FULL" ]; then
-            echo "Error: $DSM_VER_FULL is not exist. Will use latest version."
-            DSM_VER_FULL=$(echo "$OS_INDEX" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
+          if ! grep -Fq "$DSM_VER_FULL" <<< "$OS_INDEX"; then
+            echo "Error: ${DSM_VER_FULL} is not exist. Will use latest version."
+            # DSM_VER_FULL=$(echo "$OS_INDEX" | grep -oE "[6-9]\.[0-9](\.[0-9])?-[0-9]+(-[0-9]+)?" | head -n1)
+            DSM_VER_FULL=$(grep -oE '[6-9]\.[0-9](\.[0-9])?-[0-9]+(-[0-9]+)?' <<< "$OS_INDEX" | head -1)
             echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_ENV
-            DSM_VER_FULL_SHORT="$(echo "$DSM_VER_FULL" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+-(.*)$/\1-\2/')"
-            DSM_VER_FULL_TEST=true
-          fi
-          if ! ${DSM_VER_FULL_TEST} || ! echo "$OS_INDEX" | grep -Fq "$DSM_VER_FULL"; then
-            echo "Error: $DSM_VER_FULL is not exist. Will use latest version."
-            DSM_VER_FULL=$(echo "$OS_INDEX" | grep -oE "[6-9].[0-9](.[0-9])?-[0-9]*(-[0-9])?" | head -n1)
-            echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_ENV
-            DSM_VER_FULL_SHORT="$(echo "$DSM_VER_FULL" | sed -E 's/^([0-9]+\.[0-9]+)\.[0-9]+-(.*)$/\1-\2/')"
-            DSM_VER_FULL_TEST=true
           fi
           # 計算 DSM 版本別名
           # Check DSM_VER_FULL is major version or minor version

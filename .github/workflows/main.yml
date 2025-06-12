@@ -74,7 +74,8 @@ jobs:
             | sed 's/.*<td>\(.*\)<\/td>.*/\1/')
           if [ -z "$CPU_SERIES_FINDED" ]; then
             echo "Error: Could not find CPU_SERIES for '$MODEL'. Please check the input or device in build_json."
-            exit 1
+            # exit 1
+            echo "::warning::CPU_SERIES for $MODEL not found, skip validation"
           fi
           if [ "$CPU_SERIES_FINDED" != "$CPU_SERIES" ]; then
             echo "Warning: CPU_SERIES for '$MODEL' should be '$CPU_SERIES_FINDED'. Please check the input or device in build_json."

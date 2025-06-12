@@ -69,7 +69,7 @@ jobs:
 
           # 驗證 MODEL 與 CPU_SERIES
           CPU_SERIES_FINDED=$(wget -qO- "$NAS_CPU_LIST_URL" \
-            | grep -A1 "<td>$MODEL</td>" \
+            | grep -i -A1 "<td>$MODEL</td>" \
             | tail -1 \
             | sed 's/.*<td>\(.*\)<\/td>.*/\1/')
           if [ -z "$CPU_SERIES_FINDED" ]; then

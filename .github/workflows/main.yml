@@ -47,33 +47,31 @@ jobs:
   init:
     runs-on: ubuntu-latest
     steps:
-      - name: Install jq
+      - name: Install jq        # jq 必要
         run: sudo apt-get update && sudo apt-get install -y jq
-      - name: gen
+
+      - name: Generate matrix
         id: gen
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            echo '::set-output name=json::[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]'
-          else
-            # 把三條逗號字串拆成陣列，再用 jq zip 成物件
-            devices="${{ inputs.device_list }}"
-            cpus="${{ inputs.cpu_series_list }}"
-            archs="${{ inputs.arch_list }}"
-            jq -n --arg d "$devices" --arg c "$cpus" --arg a "$archs" '
-              ($d|split(","))
-              | . as $dlist
-              | ($c|split(",")) as $clist
-              | ($a|split(",")) as $alist
-              | [range(0; $dlist|length) | {
-                  device:$dlist[.],
-                  cpu_series:$clist[.],
-                  arch:$alist[.]
-                }]'
-            > matrix.json
-            echo "json=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
-          fi
+          # 解析輸入（逗號分隔）
+          IFS=',' read -ra DEVICES <<< "${{ inputs.device_list }}"
+          IFS=',' read -ra CPUS   <<< "${{ inputs.cpu_series_list }}"
+          IFS=',' read -ra ARCHS  <<< "${{ inputs.arch_list }}"
+
+          # zip 三條陣列 → 物件陣列
+          jq -n --argjson d "$(printf '%s\n' "${DEVICES[@]}" | jq -R . | jq -s .)" \
+                --argjson c "$(printf '%s\n' "${CPUS[@]}"   | jq -R . | jq -s .)" \
+                --argjson a "$(printf '%s\n' "${ARCHS[@]}"  | jq -R . | jq -s .)" '
+            [ range(0; ($d|length)) | {
+                device:   $d[.],
+                cpu_series:$c[.],
+                arch:     $a[.]
+              } ]' > matrix.json
+
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
     outputs:
-      matrix: ${{ steps.gen.outputs.json }}
+      matrix: ${{ steps.gen.outputs.matrix }}
+      dsm_ver_full: ${{ inputs.dsm_ver_full }}
 
   build:
     runs-on: ubuntu-latest

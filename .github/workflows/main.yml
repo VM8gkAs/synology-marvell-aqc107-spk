@@ -53,22 +53,26 @@ jobs:
       - name: Generate matrix
         id: gen
         run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            echo '::set-output name=json::[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]'
+          else
           # 解析輸入（逗號分隔）
-          IFS=',' read -ra DEVICES <<< "${{ inputs.device_list }}"
-          IFS=',' read -ra CPUS   <<< "${{ inputs.cpu_series_list }}"
-          IFS=',' read -ra ARCHS  <<< "${{ inputs.arch_list }}"
+            IFS=',' read -ra DEVICES <<< "${{ inputs.device_list }}"
+            IFS=',' read -ra CPUS   <<< "${{ inputs.cpu_series_list }}"
+            IFS=',' read -ra ARCHS  <<< "${{ inputs.arch_list }}"
 
-          # zip 三條陣列 → 物件陣列
-          jq -n --argjson d "$(printf '%s\n' "${DEVICES[@]}" | jq -R . | jq -s .)" \
-                --argjson c "$(printf '%s\n' "${CPUS[@]}"   | jq -R . | jq -s .)" \
-                --argjson a "$(printf '%s\n' "${ARCHS[@]}"  | jq -R . | jq -s .)" '
-            [ range(0; ($d|length)) | {
-                device:   $d[.],
-                cpu_series:$c[.],
-                arch:     $a[.]
-              } ]' > matrix.json
-
-          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+            # zip 三條陣列 → 物件陣列
+            jq -n --argjson d "$(printf '%s\n' "${DEVICES[@]}" | jq -R . | jq -s .)" \
+                  --argjson c "$(printf '%s\n' "${CPUS[@]}"   | jq -R . | jq -s .)" \
+                  --argjson a "$(printf '%s\n' "${ARCHS[@]}"  | jq -R . | jq -s .)" '
+              [ range(0; ($d|length)) | {
+                  device:   $d[.],
+                  cpu_series:$c[.],
+                  arch:     $a[.]
+                } ]' > matrix.json
+            json=$(jq -c . matrix.json)
+          printf 'matrix=%s\n' "$json" >> "$GITHUB_OUTPUT"
+          printf 'dsm_ver_full=%s\n' "${{ inputs.dsm_ver_full || '"7.2.2-72806-3"' }}" >> "$GITHUB_OUTPUT"
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       dsm_ver_full: ${{ inputs.dsm_ver_full }}

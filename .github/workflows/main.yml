@@ -9,15 +9,22 @@ on:
         description: "完整 DSM build number"
         required: false
         default: "7.2.2-72806-3"
-      build_json:
-        description: "機型清單 (逗號分隔或 JSON 陣列)"
+        type: string
+      device_list:
+        description: "機型清單 (逗號分隔)"
         required: false
-        default: >
-          [{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]
-          # DS1821+, RS3618xs, RS4021xs+, RS820RP+, DS3617xsII, DS216+II, DS1517
-          # [{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"},
-          #  {"device":"ds920plus","cpu_series":"geminilake","arch":"x86_64"},
-          #  {"device":"ds423","cpu_series":"rtd1619b","arch":"armv8"}]
+        default: "ds1821plus"
+        type: string
+      cpu_series_list:
+        description: "CPU系列清單 (逗號分隔)"
+        required: false
+        default: "v1000"
+        type: string
+      arch_list:
+        description: "架構清單 (逗號分隔)"
+        required: false
+        default: "x86_64"
+        type: string
 
 env:
   PKG_NAME: "atlantic"
@@ -37,18 +44,51 @@ env:
   # https://www.marvell.com/support/downloads.html
 
 jobs:
+  init:
+    runs-on: ubuntu-latest
+    outputs:
+      DEVICE_LIST: ${{ steps.generate-matrix.outputs.DEVICE_LIST }}
+      CPU_SERIES_LIST: ${{ steps.generate-matrix.outputs.CPU_SERIES_LIST }}
+      ARCH_LIST: ${{ steps.generate-matrix.outputs.ARCH_LIST }}
+      DSM_VER_FULL: ${{ steps.generate-matrix.outputs.DSM_VER_FULL }}
+    steps:
+      - name: generate-matrix
+        id: generate-matrix
+        run: |
+          if github.event.push; then
+            DEVICE_LIST="ds1821plus"
+            CPU_SERIES_LIST="v1000"
+            ARCH_LIST="x86_64"
+            DSM_VER_FULL="7.2.2-72806-3"
+          else
+            DEVICE_LIST=${{ inputs.device_list }}
+            CPU_SERIES_LIST=${{ inputs.cpu_series_list }}
+            ARCH_LIST=${{ inputs.arch_list }}
+            DSM_VER_FULL=${{ inputs.dsm_ver_full }}
+          fi
+          DEVICE_LIST=$(echo $DEVICE_LIST | jq -c '. | split(" ") | map(select(length > 0))')
+          CPU_SERIES_LIST=$(echo $CPU_SERIES_LIST | jq -c '. | split(" ") | map(select(length > 0))')
+          ARCH_LIST=$(echo $ARCH_LIST | jq -c '. | split(" ") | map(select(length > 0))')
+          echo "DEVICE_LIST=$DEVICE_LIST" >> $GITHUB_OUTPUT
+          echo "CPU_SERIES_LIST=$CPU_SERIES_LIST" >> $GITHUB_OUTPUT
+          echo "ARCH_LIST=$ARCH_LIST" >> $GITHUB_OUTPUT
+          echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_OUTPUT
   build:
     runs-on: ubuntu-latest
+    needs: init
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON( inputs.build_json || '[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]' ) }}
+        include:
+          - device: ${{ fromJSON(needs.init.outputs.device_list) }}
+            cpu_series: ${{ fromJSON(needs.init.outputs.cpu_series_list) }}
+            arch: ${{ fromJSON(needs.init.outputs.arch_list) }}
     name: Build - ${{ matrix.device }}
     env:
-      DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}
       CPU_SERIES: ${{ matrix.cpu_series }}
       ARCH: ${{ matrix.arch }}
-      DSM_VER_FULL: ${{ inputs.dsm_ver_full || '7.2.2-72806-3' }}
+      DSM_VER_FULL: ${{ inputs.dsm_ver_full }}
+      DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}
     steps:
       # —————————— 準備 ——————————
       - name: Initialize Folder
@@ -71,15 +111,14 @@ jobs:
 
           # 2) 驗證 MODEL 與 CPU_SERIES
           CPU_SERIES_FINDED=$(wget -qO- "$NAS_CPU_LIST_URL" \
-            | grep -i -A1 "<td>$MODEL</td>" \
+            | grep -i -A1 -e "<td>$MODEL</td>" \
             | tail -1 \
             | sed 's/.*<td>\(.*\)<\/td>.*/\1/')
           if [ -z "$CPU_SERIES_FINDED" ]; then
             echo "Error: Could not find CPU_SERIES for '$MODEL'. Please check the input or device in build_json."
-            # exit 78
             echo "::warning::CPU_SERIES for $MODEL not found, skip validation"
           fi
-          if [ "$CPU_SERIES_FINDED" != "$CPU_SERIES" ]; then
+          if !$CPU_SERIES_FINDED && [ "$CPU_SERIES_FINDED" != "$CPU_SERIES" ]; then
             echo "Warning: CPU_SERIES for '$MODEL' should be '$CPU_SERIES_FINDED'. Please check the input or device in build_json."
             CPU_SERIES=${CPU_SERIES_FINDED}
             echo "CPU_SERIES=$CPU_SERIES" >> $GITHUB_ENV
@@ -91,19 +130,18 @@ jobs:
           # ds1821+ → 1821+
           MODEL_SUB="$(echo "${MODEL}" | sed 's/^[a-z][a-z]//')"
           # ds1821+ → DS1821+ / ds416play → DS416play
-          # MODEL_UPPER="$(echo "${MODEL_SERIES}" | tr '[:lower:]' '[:upper:]')${MODEL_SUB}"
+          MODEL_UPPER="$(echo "${MODEL_SERIES}" | tr '[:lower:]' '[:upper:]')${MODEL_SUB}"
           echo "MODEL=${MODEL}" >> $GITHUB_ENV
 
           # 4) 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
-          OS_INDEX=$(curl -fsSL "$ARCHIVE_OS_URL") || {
-            echo "::error::無法取得 DSM 索引頁"; exit 78; }
-          # $DSM_VER_FULL is not exist
+          OS_INDEX=$(curl -fsSL "$ARCHIVE_OS_URL") || {echo "::error::無法取得 DSM 索引頁"; exit 1;}
           if ! grep -Fq "$DSM_VER_FULL" <<< "$OS_INDEX"; then
             echo "Error: ${DSM_VER_FULL} is not exist. Will use latest version."
             # DSM_VER_FULL=$(echo "$OS_INDEX" | grep -oE "[6-9]\.[0-9](\.[0-9])?-[0-9]+(-[0-9]+)?" | head -n1)
             DSM_VER_FULL=$(grep -oE '[6-9]\.[0-9](\.[0-9])?-[0-9]+(-[0-9]+)?' <<< "$OS_INDEX" | head -1)
             echo "DSM_VER_FULL=$DSM_VER_FULL" >> $GITHUB_ENV
           fi
+
           # 5) 計算 DSM 版本別名
           # Check DSM_VER_FULL is major version or minor version
           # 7.2.2-72806 is major version / 7.2.2-72806-3 is minor version

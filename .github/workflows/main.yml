@@ -609,24 +609,30 @@ jobs:
           # 1) 切換目錄
           cd spksrc
 
-          # 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
-          # 會放進 lib/modules/$KERNEL_VER/
-          # 2) 建立 driver 套件骨架（spk/atlantic）
-          # ./mk/spksrc.create.sh driver/atlantic
-          bash ./mk/spksrc.create.sh driver/atlantic
+          # 2) 建立 driver 套件骨架目錄
+          mkdir -p spk/atlantic
+          mkdir -p spk/atlantic/src
 
-          # 3) 建立模組目的資料夾並複製
+          # 3) 複製我們的套件檔案到 spksrc 框架
+          cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/"* spk/atlantic/
+
+          # 4) 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
+          # 會放進 lib/modules/$KERNEL_VER/
           if [ -z "$KERNEL_VER" ]; then
             echo "::error::KERNEL_VER is not set, cannot copy kernel module"
             exit 1
           fi
+
+          # 5) 建立模組目的資料夾並複製
+          mkdir -p "spk/atlantic/files/lib/modules/${KERNEL_VER}"
           install -D \
             "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
             "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
 
-          # 4) 更新版本號
-          sed -i "s/^PKG_VERS.*/PKG_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
-          # 或模板是 VERSION 的話請改成：sed -i 's/^VERSION.*/VERSION = .../'
+          # 6) 更新版本號
+          if [ -f "spk/atlantic/Makefile" ]; then
+            sed -i "s/^SPK_VERS.*/SPK_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
+          fi
 
       - name: 下載工具鏈 (一次性節省後續 cache)
         run: |

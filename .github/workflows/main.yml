@@ -680,20 +680,52 @@ jobs:
           TCVERSION=${DSM_TAG%-*}
 
           # 3) 映射架構名稱到 spksrc 格式
-          case "${ARCH}" in
-            "x86_64")
-              SPKSRC_ARCH="x64"
+          # spksrc 使用具體的 CPU 架構名稱，而非通用名稱
+          case "${CPU_SERIES}" in
+            "v1000")
+              SPKSRC_ARCH="v1000"
               ;;
-            "x86")
-              SPKSRC_ARCH="x86"
+            "geminilake")
+              SPKSRC_ARCH="geminilake"
+              ;;
+            "apollolake")
+              SPKSRC_ARCH="apollolake"
+              ;;
+            "kvmx64")
+              SPKSRC_ARCH="kvmx64"
+              ;;
+            "denverton")
+              SPKSRC_ARCH="denverton"
+              ;;
+            "broadwell")
+              SPKSRC_ARCH="broadwell"
+              ;;
+            "braswell")
+              SPKSRC_ARCH="braswell"
+              ;;
+            "cedarview")
+              SPKSRC_ARCH="cedarview"
+              ;;
+            "evansport")
+              SPKSRC_ARCH="evansport"
+              ;;
+            "grantley")
+              SPKSRC_ARCH="grantley"
+              ;;
+            "purley")
+              SPKSRC_ARCH="purley"
+              ;;
+            "dockerx64")
+              SPKSRC_ARCH="dockerx64"
               ;;
             *)
-              SPKSRC_ARCH="${ARCH}"
+              # 對於未知的 CPU 系列，使用 CPU_SERIES 作為備用
+              SPKSRC_ARCH="${CPU_SERIES}"
               ;;
           esac
 
           echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_ENV
-          echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, SPKSRC_ARCH=${SPKSRC_ARCH}"
+          echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, CPU_SERIES=${CPU_SERIES}, SPKSRC_ARCH=${SPKSRC_ARCH}"
           make TCVERSION=${TCVERSION} arch-${SPKSRC_ARCH} package-${PKG_NAME}
 
       - name: 上傳產出的 .spk

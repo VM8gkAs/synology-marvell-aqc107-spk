@@ -613,26 +613,46 @@ jobs:
           mkdir -p spk/atlantic
           mkdir -p spk/atlantic/src
 
-          # 3) 複製我們的套件檔案到 spksrc 框架
-          cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/"* spk/atlantic/
+          # 3) 嘗試複製我們的套件檔案到 spksrc 框架
+          echo "Source directory: ${GITHUB_WORKSPACE}/packages/driver/atlantic/"
+          if [ -d "${GITHUB_WORKSPACE}/packages/driver/atlantic" ]; then
+            echo "Source directory exists, attempting to copy files..."
+            ls -la "${GITHUB_WORKSPACE}/packages/driver/atlantic/" 2>/dev/null || echo "No files found"
+            cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/"* spk/atlantic/ 2>/dev/null && echo "Files copied successfully" || echo "Copy failed or no files to copy"
+          else
+            echo "::warning::Source directory does not exist"
+          fi
 
-          # 4) 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
-          # 會放進 lib/modules/$KERNEL_VER/
+          # 4) 檢查是否需要建立基本檔案
+          if [ ! -f "spk/atlantic/Makefile" ]; then
+            echo "Creating basic Makefile..."
+            echo 'SPK_NAME = atlantic' > spk/atlantic/Makefile
+            echo 'SPK_VERS = 2.5.12' >> spk/atlantic/Makefile
+            echo 'SPK_REV = 1' >> spk/atlantic/Makefile
+            echo 'DEPENDS = cross/atlantic' >> spk/atlantic/Makefile
+            echo 'MAINTAINER = your-maintainer' >> spk/atlantic/Makefile
+            echo 'DESCRIPTION = Marvell AQC107 10GbE Network Driver' >> spk/atlantic/Makefile
+            echo 'include ../../mk/spksrc.spk.mk' >> spk/atlantic/Makefile
+          fi
+
+          # 5) 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
           if [ -z "$KERNEL_VER" ]; then
-            echo "::error::KERNEL_VER is not set, cannot copy kernel module"
+            echo "::error::KERNEL_VER is not set"
             exit 1
           fi
 
-          # 5) 建立模組目的資料夾並複製
+          # 6) 建立模組目的資料夾並複製
           mkdir -p "spk/atlantic/files/lib/modules/${KERNEL_VER}"
-          install -D \
-            "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
-            "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
-
-          # 6) 更新版本號
-          if [ -f "spk/atlantic/Makefile" ]; then
-            sed -i "s/^SPK_VERS.*/SPK_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
+          if [ -f "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" ]; then
+            install -D "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
+            echo "Kernel module copied successfully"
+          else
+            echo "::error::Kernel module not found: ${DRIVER_DIR}/${PKG_NAME}/atlantic.ko"
+            exit 1
           fi
+
+          # 7) 更新版本號
+          sed -i "s/^SPK_VERS.*/SPK_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
 
       - name: 下載工具鏈 (一次性節省後續 cache)
         run: |

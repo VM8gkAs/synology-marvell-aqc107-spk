@@ -212,7 +212,7 @@ jobs:
           # ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
           # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           # ---------- ARCH_FINDED ----------
-          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
+          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
 
           if [ -z "$ARCH_FINDED" ]; then
             echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"

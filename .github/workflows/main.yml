@@ -209,6 +209,15 @@ jobs:
           echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | head -20
           echo "TOOLCHAIN_FILE_NAME: $TOOLCHAIN_FILE_NAME"
 
+          # If the specific pattern doesn't match, try a more general pattern
+          if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
+            echo "Trying more general pattern..."
+            TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
+                                  grep -oE "${CPU_SERIES}.*GPL\.txz" |
+                                  head -n1)
+            echo "TOOLCHAIN_FILE_NAME (general): $TOOLCHAIN_FILE_NAME"
+          fi
+
           if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
             echo "::warning::找不到 $CPU_SERIES 的 toolchain 於 $DSM_TAG，跳過此機種"
             exit 1
@@ -217,23 +226,67 @@ jobs:
           # ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
           # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           # ---------- ARCH_FINDED ----------
-          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL.txz/\1/')
+          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
           echo "Toolchain filename: $TOOLCHAIN_FILE_NAME"
           echo "Extracted ARCH: $ARCH_FINDED"
+
+          # If ARCH extraction failed, try alternative methods
+          if [ -z "$ARCH_FINDED" ] || [ "$ARCH_FINDED" = "$TOOLCHAIN_FILE_NAME" ] || [[ "$ARCH_FINDED" =~ ^[0-9]+$ ]]; then
+            echo "ARCH extraction failed or returned invalid value ($ARCH_FINDED), trying alternative method..."
+            # Extract from URL if available
+            if [ -n "$TOOLCHAIN_URL" ]; then
+              ARCH_FINDED=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+              echo "ARCH from URL: $ARCH_FINDED"
+            fi
+            # If still no ARCH, try to extract from filename with different pattern
+            if [ -z "$ARCH_FINDED" ] && [ -n "$TOOLCHAIN_FILE_NAME" ]; then
+              ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_(x86_64|armv8|armv7).*/\1/')
+              echo "ARCH from filename fallback: $ARCH_FINDED"
+            fi
+            # Last resort: hardcode based on known CPU series
+            if [ -z "$ARCH_FINDED" ]; then
+              case "$CPU_SERIES" in
+                v1000|braswell|avoton)
+                  ARCH_FINDED="x86_64"
+                  ;;
+                rtd1296|armada37xx)
+                  ARCH_FINDED="armv8"
+                  ;;
+                armada38x|armada370)
+                  ARCH_FINDED="armv7"
+                  ;;
+                *)
+                  ARCH_FINDED="x86_64"
+                  ;;
+              esac
+              echo "ARCH from CPU_SERIES fallback: $ARCH_FINDED"
+            fi
+          fi
 
           if [ -z "$ARCH_FINDED" ]; then
             echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"
             exit 1
           fi
 
+          # Validate ARCH_FINDED
+          case "$ARCH_FINDED" in
+            x86_64|armv8|armv7)
+              echo "Valid architecture detected: $ARCH_FINDED"
+              ;;
+            *)
+              echo "::warning::Invalid or unexpected architecture: $ARCH_FINDED, will attempt to use it anyway"
+              ;;
+          esac
+
           if [ "$ARCH_FINDED" != "$ARCH" ]; then
             echo "Warning: ARCH for '$MODEL' should be '$ARCH_FINDED'. Please check the input or device in build_json."
             ARCH=${ARCH_FINDED}
             echo "ARCH=$ARCH" >> $GITHUB_ENV
           fi
+          echo "ARCH_FINDED=$ARCH_FINDED" >> $GITHUB_ENV
 
           # 將 ARCH 轉換為 kernel 預期的格式
-          case "$ARCH" in
+          case "$ARCH_FINDED" in
             x86_64)
               KERNEL_ARCH="x86"
               ;;
@@ -244,11 +297,31 @@ jobs:
               KERNEL_ARCH="arm"
               ;;
             *)
-              KERNEL_ARCH="$ARCH"
+              # If ARCH_FINDED doesn't match known patterns, try to extract from it
+              if [[ "$ARCH_FINDED" == *x86* ]]; then
+                KERNEL_ARCH="x86"
+              elif [[ "$ARCH_FINDED" == *arm64* ]] || [[ "$ARCH_FINDED" == *armv8* ]]; then
+                KERNEL_ARCH="arm64"
+              elif [[ "$ARCH_FINDED" == *arm* ]]; then
+                KERNEL_ARCH="arm"
+              else
+                echo "::warning::Unknown architecture $ARCH_FINDED, attempting to use it directly as kernel arch"
+                KERNEL_ARCH="$ARCH_FINDED"
+                # If it's still invalid, default to x86
+                if [[ "$KERNEL_ARCH" =~ ^[0-9]+$ ]] || [ -z "$KERNEL_ARCH" ]; then
+                  echo "::warning::Invalid kernel arch $KERNEL_ARCH, defaulting to x86"
+                  KERNEL_ARCH="x86"
+                fi
+              fi
               ;;
           esac
-          echo "Original ARCH: $ARCH, Kernel ARCH: $KERNEL_ARCH"
-          echo "KERNEL_ARCH=$KERNEL_ARCH" >> $GITHUB_ENV
+          echo "=== Architecture Summary ==="
+          echo "Matrix ARCH: $ARCH"
+          echo "Detected ARCH: $ARCH_FINDED"
+          echo "Kernel ARCH: $KERNEL_ARCH"
+          echo "TOOLCHAIN_FILE_NAME: $TOOLCHAIN_FILE_NAME"
+          echo "TOOLCHAIN_URL: $TOOLCHAIN_URL"
+          echo "============================"
           # 8) 取下載網址方便之後下載
           # TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
 
@@ -256,6 +329,7 @@ jobs:
                   | grep -B2 "$TOOLCHAIN_FILE_NAME" \
                   | grep -oP '<a href="\K[^"]+' \
                   | head -n1)
+          echo "TOOLCHAIN_URL: $TOOLCHAIN_URL"
           if [ -z "$TOOLCHAIN_URL" ]; then
             echo "::warning::抓不到下載網址，跳過 $MODEL"
             exit 1
@@ -357,11 +431,11 @@ jobs:
         run: |
           # 1) 宣告環境變數 TOOLCHAIN_DIR 和 CROSS_COMPILE
           echo "KERNEL_SRC=${PWD}/linux-${KERNEL_VER_SERIES}.x" >> $GITHUB_ENV
-          echo "TOOLCHAIN_DIR=${PWD}/${ARCH}-pc-linux-gnu/" >> $GITHUB_ENV
+          echo "TOOLCHAIN_DIR=${PWD}/${ARCH_FINDED}-pc-linux-gnu/" >> $GITHUB_ENV
           # CROSS_COMPILE_PATH="${PWD}/${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu-"
           # echo "CROSS_COMPILE_ENV=${CROSS_COMPILE_PATH}" >> $GITHUB_ENV
-          echo "CROSS_COMPILE=${PWD}/${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu-" >> $GITHUB_ENV
-          echo "${PWD}/${ARCH}-pc-linux-gnu/bin" >> $GITHUB_PATH     # gcc 放進 PATH
+          echo "CROSS_COMPILE=${PWD}/${ARCH_FINDED}-pc-linux-gnu/bin/${ARCH_FINDED}-pc-linux-gnu-" >> $GITHUB_ENV
+          echo "${PWD}/${ARCH_FINDED}-pc-linux-gnu/bin" >> $GITHUB_PATH     # gcc 放進 PATH
 
           # 2) 切換目錄
           cd linux-${KERNEL_VER_SERIES}.x

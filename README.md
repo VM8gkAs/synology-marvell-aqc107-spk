@@ -1,4 +1,4 @@
-# Synology DS1821+ Marvell AQC107 Driver SPK
+# Synology Marvell AQC107 Driver SPK
 
 本倉庫提供了一個完整的 GitHub Actions 流程，自動：
 
@@ -13,9 +13,15 @@
 
 - **一鍵編譯 + 打包**  
   Push 或手動觸發就能跑完整流水線，無需本地搭建編譯環境  
-- **支持 DS1821+（DSM 7.2 / Linux 4.4.302）**  
+- **目標支持 DS1821+（DSM 7.2 / Linux 4.4.302）**  
 - **自動產出可在「套件中心」安裝的 SPK**  
 - **MIT 開源許可**，自由訂製、二次發布
+
+---
+
+## 目標支持
+
+- DS1821+（DSM 7.2 / Linux 4.4.302）
 
 ---
 
@@ -26,7 +32,7 @@
    - `DSM_TAG`  
    - `KERNEL_VER`  
    - …  
-3. Push 到 `main` 分支，或手動在 Actions 面板觸發 “Build & Package Marvell AQC107 Driver for DS1821+”  
+3. Push 到 `main` 分支，或手動在 Actions 面板觸發 “Build & Package Marvell AQC107 Driver”  
 4. 編譯完成後，在對應的 Workflow Run 頁面下載 `.spk`，直接拖入 DSM「套件中心」→「手動安裝」
 
 ---
@@ -45,4 +51,4 @@
 ## 貢獻&支持
 
 歡迎提交 Issue、Pull Request，或在 Discussions 裡交流使用心得。  
-如果你在 DS1821+ 上遇到任何相容性問題，也請在 Issue 中回饋，謝謝！
+如果你遇到任何相容性問題，也請在 Issue 中回饋，謝謝！

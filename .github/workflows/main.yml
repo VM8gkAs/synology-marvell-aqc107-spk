@@ -111,16 +111,15 @@ jobs:
           # 1) plus 回復原始 + (ds1821plus → ds1821+ / rs2423rpplus → rs2423rp+)
           MODEL="$(echo "$DEVICE" | sed 's/plus$/+/')"
 
-          # 2) 驗證 MODEL 與 CPU_SERIES
-          CPU_SERIES_FIND=$(wget -qO- "$NAS_CPU_LIST_URL" \
-            | tr -d '\n' \
-            | grep -ioP "<td[^>]*>${MODEL//+/\\+}</td>.*?<td[^>]*>\\K[^<]+" \
-            | head -1)
-          if [ -n "$CPU_SERIES_FIND" ] && [ "$CPU_SERIES_FIND" != "$CPU_SERIES" ]; then
-            echo "Warning: CPU_SERIES for '$MODEL' 應為 '$CPU_SERIES_FIND'"
-            CPU_SERIES="$CPU_SERIES_FIND"
-            echo "CPU_SERIES=$CPU_SERIES" >> "$GITHUB_ENV"
-          fi
+          # 2) 驗證 MODEL 與 CPU_SERIES (已移除，因為網頁格式可能已改變)
+          # CPU_SERIES_FIND=$(curl -s "$NAS_CPU_LIST_URL" \
+          #   | grep -ioP "<td[^>]*>${MODEL//+/\\+}</td>.*?<td[^>]*>\\K[^<]+" \
+          #   | head -1)
+          # if [ -n "$CPU_SERIES_FIND" ] && [ "$CPU_SERIES_FIND" != "$CPU_SERIES" ]; then
+          #   echo "Warning: CPU_SERIES for '$MODEL' 應為 '$CPU_SERIES_FIND'"
+          #   CPU_SERIES="$CPU_SERIES_FIND"
+          #   echo "CPU_SERIES=$CPU_SERIES" >> "$GITHUB_ENV"
+          # fi
           # CPU_SERIES_FINDED=$(wget -qO- "$NAS_CPU_LIST_URL" \
           #   | grep -i -A1 -e "<td>$MODEL</td>" \
           #   | tail -1 \
@@ -145,7 +144,7 @@ jobs:
           echo "MODEL=${MODEL}" >> $GITHUB_ENV
 
           # 4) 驗證 DSM_VER_FULL (https://archive.synology.com/download/Os/DSM)
-          OS_INDEX=$(curl -fsSL "$ARCHIVE_OS_URL") || {echo "::error::無法取得 DSM 索引頁"; exit 1;}
+          OS_INDEX=$(curl -fsSL "$ARCHIVE_OS_URL")
           if ! grep -Fq "$DSM_VER_FULL" <<< "$OS_INDEX"; then
             echo "Error: ${DSM_VER_FULL} is not exist. Will use latest version."
             # DSM_VER_FULL=$(echo "$OS_INDEX" | grep -oE "[6-9]\.[0-9](\.[0-9])?-[0-9]+(-[0-9]+)?" | head -n1)

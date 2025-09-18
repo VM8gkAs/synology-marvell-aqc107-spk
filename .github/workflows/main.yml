@@ -83,7 +83,8 @@ jobs:
     needs: init
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.init.outputs.matrix) }}
+      matrix:
+        include: ${{ fromJSON(needs.init.outputs.matrix) }}
     name: Build - ${{ matrix.device }}
     env:
       DEVICE: ${{ matrix.device }}

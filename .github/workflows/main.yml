@@ -206,8 +206,9 @@ jobs:
             echo "TOOLCHAIN_URL already available: $TOOLCHAIN_URL"
             # Try to extract ARCH from existing URL
             TEST_ARCH=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*_(x86_64|armv8|armv7)-GPL\.txz/\1/')
+            echo "DEBUG: Extracted TEST_ARCH from URL: '$TEST_ARCH'"
             if [ -n "$TEST_ARCH" ] && [ "$TEST_ARCH" != "$TOOLCHAIN_URL" ]; then
-              echo "Extracted ARCH from existing URL: $TEST_ARCH"
+              echo "DEBUG: Using TEST_ARCH from URL: $TEST_ARCH"
               ARCH_FINDED="$TEST_ARCH"
             fi
           fi
@@ -229,6 +230,27 @@ jobs:
             echo "TOOLCHAIN_FILE_NAME (general): $TOOLCHAIN_FILE_NAME"
           fi
 
+          # If still no TOOLCHAIN_FILE_NAME, create a fallback for known CPU series
+          if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
+            echo "No TOOLCHAIN_FILE_NAME found, using fallback for CPU_SERIES: $CPU_SERIES"
+            case "$CPU_SERIES" in
+              v1000)
+                TOOLCHAIN_FILE_NAME="v1000-gcc1220_glibc236_x86_64-GPL.txz"
+                ;;
+              braswell)
+                TOOLCHAIN_FILE_NAME="braswell-gcc493_glibc220_x86_64-GPL.txz"
+                ;;
+              avoton)
+                TOOLCHAIN_FILE_NAME="avoton-gcc493_glibc220_x86_64-GPL.txz"
+                ;;
+              *)
+                echo "::error::Unknown CPU_SERIES $CPU_SERIES and no toolchain file found"
+                exit 1
+                ;;
+            esac
+            echo "TOOLCHAIN_FILE_NAME (fallback): $TOOLCHAIN_FILE_NAME"
+          fi
+
           if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
             echo "::warning::找不到 $CPU_SERIES 的 toolchain 於 $DSM_TAG，跳過此機種"
             exit 1
@@ -238,9 +260,12 @@ jobs:
           # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           # ---------- ARCH_FINDED ----------
           # Try multiple extraction methods
+          echo "DEBUG: Starting ARCH extraction from TOOLCHAIN_FILE_NAME='$TOOLCHAIN_FILE_NAME'"
           ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_(x86_64|armv8|armv7)-GPL\.txz/\1/')
+          echo "DEBUG: First extraction attempt: ARCH_FINDED='$ARCH_FINDED'"
           if [ -z "$ARCH_FINDED" ] || [ "$ARCH_FINDED" = "$TOOLCHAIN_FILE_NAME" ]; then
             ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+            echo "DEBUG: Second extraction attempt: ARCH_FINDED='$ARCH_FINDED'"
           fi
           echo "Toolchain filename: $TOOLCHAIN_FILE_NAME"
           echo "Extracted ARCH: $ARCH_FINDED"
@@ -323,35 +348,52 @@ jobs:
           echo "ARCH_FINDED=$ARCH_FINDED" >> $GITHUB_ENV
 
           # 將 ARCH 轉換為 kernel 預期的格式
+          echo "DEBUG: About to convert ARCH_FINDED='$ARCH_FINDED' to KERNEL_ARCH"
           case "$ARCH_FINDED" in
             x86_64)
               KERNEL_ARCH="x86"
+              echo "DEBUG: Matched x86_64, setting KERNEL_ARCH=x86"
               ;;
             armv8)
               KERNEL_ARCH="arm64"
+              echo "DEBUG: Matched armv8, setting KERNEL_ARCH=arm64"
               ;;
             armv7)
               KERNEL_ARCH="arm"
+              echo "DEBUG: Matched armv7, setting KERNEL_ARCH=arm"
               ;;
             *)
+              echo "DEBUG: ARCH_FINDED='$ARCH_FINDED' did not match any case, going to fallback logic"
               # If ARCH_FINDED doesn't match known patterns, try to extract from it
               if [[ "$ARCH_FINDED" == *x86* ]]; then
                 KERNEL_ARCH="x86"
+                echo "DEBUG: Fallback: found x86 in ARCH_FINDED, setting KERNEL_ARCH=x86"
               elif [[ "$ARCH_FINDED" == *arm64* ]] || [[ "$ARCH_FINDED" == *armv8* ]]; then
                 KERNEL_ARCH="arm64"
+                echo "DEBUG: Fallback: found arm in ARCH_FINDED, setting KERNEL_ARCH=arm64"
               elif [[ "$ARCH_FINDED" == *arm* ]]; then
                 KERNEL_ARCH="arm"
+                echo "DEBUG: Fallback: found arm in ARCH_FINDED, setting KERNEL_ARCH=arm"
               else
                 echo "::warning::Unknown architecture $ARCH_FINDED, attempting to use it directly as kernel arch"
                 KERNEL_ARCH="$ARCH_FINDED"
+                echo "DEBUG: Using ARCH_FINDED directly: KERNEL_ARCH='$KERNEL_ARCH'"
                 # If it's still invalid, default to x86
                 if [[ "$KERNEL_ARCH" =~ ^[0-9]+$ ]] || [ -z "$KERNEL_ARCH" ]; then
                   echo "::warning::Invalid kernel arch $KERNEL_ARCH, defaulting to x86"
                   KERNEL_ARCH="x86"
+                  echo "DEBUG: Invalid KERNEL_ARCH, defaulting to x86"
                 fi
               fi
               ;;
           esac
+          echo "DEBUG: Final KERNEL_ARCH='$KERNEL_ARCH'"
+          
+          # Safety check: ensure KERNEL_ARCH is never empty
+          if [ -z "$KERNEL_ARCH" ]; then
+            echo "::warning::KERNEL_ARCH is empty, forcing to x86"
+            KERNEL_ARCH="x86"
+          fi
           echo "=== Architecture Summary ==="
           echo "Matrix ARCH: $ARCH"
           echo "Detected ARCH: $ARCH_FINDED"
@@ -359,6 +401,7 @@ jobs:
           echo "TOOLCHAIN_FILE_NAME: $TOOLCHAIN_FILE_NAME"
           echo "TOOLCHAIN_URL: $TOOLCHAIN_URL"
           echo "============================"
+          echo "KERNEL_ARCH=$KERNEL_ARCH" >> $GITHUB_ENV
           # 8) 取下載網址方便之後下載
           # TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
 
@@ -368,8 +411,23 @@ jobs:
                   | head -n1)
           echo "TOOLCHAIN_URL: $TOOLCHAIN_URL"
           if [ -z "$TOOLCHAIN_URL" ]; then
-            echo "::warning::抓不到下載網址，跳過 $MODEL"
-            exit 1
+            echo "::warning::TOOLCHAIN_URL not found, using fallback for CPU_SERIES: $CPU_SERIES"
+            case "$CPU_SERIES" in
+              v1000)
+                TOOLCHAIN_URL="https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz"
+                ;;
+              braswell)
+                TOOLCHAIN_URL="https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28Braswell%29/braswell-gcc493_glibc220_x86_64-GPL.txz"
+                ;;
+              avoton)
+                TOOLCHAIN_URL="https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28Avoton%29/avoton-gcc493_glibc220_x86_64-GPL.txz"
+                ;;
+              *)
+                echo "::error::Unknown CPU_SERIES $CPU_SERIES and no toolchain URL found"
+                exit 1
+                ;;
+            esac
+            echo "TOOLCHAIN_URL (fallback): $TOOLCHAIN_URL"
           fi
           echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> "$GITHUB_ENV"
 
@@ -493,6 +551,11 @@ jobs:
           sed -i "s/EXTRAVERSION = /EXTRAVERSION = +/g" Makefile
 
           # 6) 準備編譯
+          echo "DEBUG: About to use KERNEL_ARCH='$KERNEL_ARCH' for kernel build"
+          if [ -z "$KERNEL_ARCH" ]; then
+            echo "::warning::KERNEL_ARCH is empty, setting to x86"
+            KERNEL_ARCH="x86"
+          fi
           export ARCH=${KERNEL_ARCH}
           echo "Building kernel with ARCH=${ARCH}"
           make clean
@@ -518,6 +581,11 @@ jobs:
           if [ -z "$KERNEL_SRC" ]; then
             echo "::error::KERNEL_SRC is not set, cannot compile module"
             exit 1
+          fi
+          echo "DEBUG: About to use KERNEL_ARCH='$KERNEL_ARCH' for module build"
+          if [ -z "$KERNEL_ARCH" ]; then
+            echo "::warning::KERNEL_ARCH is empty, setting to x86"
+            KERNEL_ARCH="x86"
           fi
           export ARCH=${KERNEL_ARCH}
           echo "Compiling module with ARCH=${ARCH}"

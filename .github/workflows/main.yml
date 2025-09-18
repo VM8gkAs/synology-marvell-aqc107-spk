@@ -201,8 +201,19 @@ jobs:
           # TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
           #                     grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
           #                     head -n1)
+          # Check if TOOLCHAIN_URL is already available (from previous run or cache)
+          if [ -n "$TOOLCHAIN_URL" ]; then
+            echo "TOOLCHAIN_URL already available: $TOOLCHAIN_URL"
+            # Try to extract ARCH from existing URL
+            TEST_ARCH=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*_(x86_64|armv8|armv7)-GPL\.txz/\1/')
+            if [ -n "$TEST_ARCH" ] && [ "$TEST_ARCH" != "$TOOLCHAIN_URL" ]; then
+              echo "Extracted ARCH from existing URL: $TEST_ARCH"
+              ARCH_FINDED="$TEST_ARCH"
+            fi
+          fi
+
           TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
-                                grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
+                                grep -oE "${CPU_SERIES}-gcc[0-9_]+.*_(x86_64|armv8|armv7)-GPL\.txz" |
                                 head -n1)
           echo "CPU_SERIES: $CPU_SERIES"
           echo "TOOLCHAIN_WEBFOLDER_CONTENT preview:"
@@ -213,7 +224,7 @@ jobs:
           if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
             echo "Trying more general pattern..."
             TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
-                                  grep -oE "${CPU_SERIES}.*GPL\.txz" |
+                                  grep -oE "${CPU_SERIES}.*\.txz" |
                                   head -n1)
             echo "TOOLCHAIN_FILE_NAME (general): $TOOLCHAIN_FILE_NAME"
           fi
@@ -226,22 +237,31 @@ jobs:
           # ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
           # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           # ---------- ARCH_FINDED ----------
-          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+          # Try multiple extraction methods
+          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_(x86_64|armv8|armv7)-GPL\.txz/\1/')
+          if [ -z "$ARCH_FINDED" ] || [ "$ARCH_FINDED" = "$TOOLCHAIN_FILE_NAME" ]; then
+            ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+          fi
           echo "Toolchain filename: $TOOLCHAIN_FILE_NAME"
           echo "Extracted ARCH: $ARCH_FINDED"
 
           # If ARCH extraction failed, try alternative methods
           if [ -z "$ARCH_FINDED" ] || [ "$ARCH_FINDED" = "$TOOLCHAIN_FILE_NAME" ] || [[ "$ARCH_FINDED" =~ ^[0-9]+$ ]]; then
             echo "ARCH extraction failed or returned invalid value ($ARCH_FINDED), trying alternative method..."
-            # Extract from URL if available
+            # Extract from URL first (most reliable)
             if [ -n "$TOOLCHAIN_URL" ]; then
-              ARCH_FINDED=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+              ARCH_FINDED=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*_(x86_64|armv8|armv7)-GPL\.txz/\1/')
               echo "ARCH from URL: $ARCH_FINDED"
             fi
             # If still no ARCH, try to extract from filename with different pattern
             if [ -z "$ARCH_FINDED" ] && [ -n "$TOOLCHAIN_FILE_NAME" ]; then
               ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_(x86_64|armv8|armv7).*/\1/')
               echo "ARCH from filename fallback: $ARCH_FINDED"
+            fi
+            # Try extracting from URL with different pattern
+            if [ -z "$ARCH_FINDED" ] && [ -n "$TOOLCHAIN_URL" ]; then
+              ARCH_FINDED=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+              echo "ARCH from URL fallback: $ARCH_FINDED"
             fi
             # Last resort: hardcode based on known CPU series
             if [ -z "$ARCH_FINDED" ]; then
@@ -261,11 +281,28 @@ jobs:
               esac
               echo "ARCH from CPU_SERIES fallback: $ARCH_FINDED"
             fi
+            # Final fallback: if still no ARCH, check if URL contains known patterns
+            if [ -z "$ARCH_FINDED" ] && [ -n "$TOOLCHAIN_URL" ]; then
+              if [[ "$TOOLCHAIN_URL" == *x86_64* ]]; then
+                ARCH_FINDED="x86_64"
+              elif [[ "$TOOLCHAIN_URL" == *armv8* ]]; then
+                ARCH_FINDED="armv8"
+              elif [[ "$TOOLCHAIN_URL" == *armv7* ]]; then
+                ARCH_FINDED="armv7"
+              fi
+              echo "ARCH from URL pattern match: $ARCH_FINDED"
+            fi
           fi
 
           if [ -z "$ARCH_FINDED" ]; then
             echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"
             exit 1
+          fi
+
+          # Final validation: ensure ARCH_FINDED is valid
+          if [[ "$ARCH_FINDED" =~ ^[0-9]+$ ]] || [ -z "$ARCH_FINDED" ]; then
+            echo "::warning::ARCH_FINDED is invalid ($ARCH_FINDED), forcing to x86_64 for v1000 CPU series"
+            ARCH_FINDED="x86_64"
           fi
 
           # Validate ARCH_FINDED
@@ -274,7 +311,7 @@ jobs:
               echo "Valid architecture detected: $ARCH_FINDED"
               ;;
             *)
-              echo "::warning::Invalid or unexpected architecture: $ARCH_FINDED, will attempt to use it anyway"
+              echo "::warning::Unexpected architecture: $ARCH_FINDED, proceeding anyway"
               ;;
           esac
 
@@ -335,6 +372,11 @@ jobs:
             exit 1
           fi
           echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> "$GITHUB_ENV"
+
+          # If TOOLCHAIN_URL is already set from previous run, use it for ARCH extraction
+          if [ -n "$TOOLCHAIN_URL" ]; then
+            echo "Using existing TOOLCHAIN_URL for ARCH extraction"
+          fi
 
           # 9) 取 Kernel 版本
           # TOOLCHAIN_URL = https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz

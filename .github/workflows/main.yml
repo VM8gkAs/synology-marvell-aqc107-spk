@@ -204,6 +204,11 @@ jobs:
           TOOLCHAIN_FILE_NAME=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" |
                                 grep -oE "${CPU_SERIES}-gcc[0-9_]+_[^_]+_(x86_64|armv8|armv7)-GPL.txz" |
                                 head -n1)
+          echo "CPU_SERIES: $CPU_SERIES"
+          echo "TOOLCHAIN_WEBFOLDER_CONTENT preview:"
+          echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | head -20
+          echo "TOOLCHAIN_FILE_NAME: $TOOLCHAIN_FILE_NAME"
+
           if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
             echo "::warning::找不到 $CPU_SERIES 的 toolchain 於 $DSM_TAG，跳過此機種"
             exit 1
@@ -213,6 +218,8 @@ jobs:
           # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           # ---------- ARCH_FINDED ----------
           ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL.txz/\1/')
+          echo "Toolchain filename: $TOOLCHAIN_FILE_NAME"
+          echo "Extracted ARCH: $ARCH_FINDED"
 
           if [ -z "$ARCH_FINDED" ]; then
             echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"
@@ -224,6 +231,24 @@ jobs:
             ARCH=${ARCH_FINDED}
             echo "ARCH=$ARCH" >> $GITHUB_ENV
           fi
+
+          # 將 ARCH 轉換為 kernel 預期的格式
+          case "$ARCH" in
+            x86_64)
+              KERNEL_ARCH="x86"
+              ;;
+            armv8)
+              KERNEL_ARCH="arm64"
+              ;;
+            armv7)
+              KERNEL_ARCH="arm"
+              ;;
+            *)
+              KERNEL_ARCH="$ARCH"
+              ;;
+          esac
+          echo "Original ARCH: $ARCH, Kernel ARCH: $KERNEL_ARCH"
+          echo "KERNEL_ARCH=$KERNEL_ARCH" >> $GITHUB_ENV
           # 8) 取下載網址方便之後下載
           # TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
 
@@ -352,6 +377,8 @@ jobs:
           sed -i "s/EXTRAVERSION = /EXTRAVERSION = +/g" Makefile
 
           # 6) 準備編譯
+          export ARCH=${KERNEL_ARCH}
+          echo "Building kernel with ARCH=${ARCH}"
           make clean
           # make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE_PATH} prepare
           # make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE_PATH} scripts
@@ -376,6 +403,8 @@ jobs:
             echo "::error::KERNEL_SRC is not set, cannot compile module"
             exit 1
           fi
+          export ARCH=${KERNEL_ARCH}
+          echo "Compiling module with ARCH=${ARCH}"
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts

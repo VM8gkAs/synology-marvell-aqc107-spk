@@ -54,7 +54,7 @@ jobs:
         id: gen
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            echo '::set-output name=json::[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]'
+            printf 'matrix=%s\n' '[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]' >> "$GITHUB_OUTPUT"
           else
           # 解析輸入（逗號分隔）
             IFS=',' read -ra DEVICES <<< "${{ inputs.device_list }}"
@@ -71,11 +71,12 @@ jobs:
                   arch:     $a[.]
                 } ]' > matrix.json
             json=$(jq -c . matrix.json)
-          printf 'matrix=%s\n' "$json" >> "$GITHUB_OUTPUT"
-          printf 'dsm_ver_full=%s\n' "${{ inputs.dsm_ver_full || '"7.2.2-72806-3"' }}" >> "$GITHUB_OUTPUT"
+            printf 'matrix=%s\n' "$json" >> "$GITHUB_OUTPUT"
+          fi
+          printf 'dsm_ver_full=%s\n' "${{ inputs.dsm_ver_full || '7.2.2-72806-3' }}" >> "$GITHUB_OUTPUT"
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
-      dsm_ver_full: ${{ inputs.dsm_ver_full }}
+      dsm_ver_full: ${{ steps.gen.outputs.dsm_ver_full }}
 
   build:
     runs-on: ubuntu-latest
@@ -88,7 +89,7 @@ jobs:
       DEVICE: ${{ matrix.device }}
       CPU_SERIES: ${{ matrix.cpu_series }}
       ARCH: ${{ matrix.arch }}
-      DSM_VER_FULL: ${{ inputs.dsm_ver_full }}
+      DSM_VER_FULL: ${{ needs.init.outputs.dsm_ver_full }}
       DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}
     steps:
       # —————————— 準備 ——————————
@@ -252,6 +253,10 @@ jobs:
       - name: Extract Kernel version
         run: |
           # 宣告 KERNEL_VER_MAJOR 和 KERNEL_VER_SERIES (Extract 4 and 4.4 from 4.4.302)
+          if [ -z "$KERNEL_VER" ]; then
+            echo "::error::KERNEL_VER is not set, cannot extract kernel version"
+            exit 1
+          fi
           echo "KERNEL_VER_MAJOR=${KERNEL_VER%%.*}" >> $GITHUB_ENV
           echo "KERNEL_VER_SERIES=${KERNEL_VER%.*}" >> $GITHUB_ENV
 
@@ -267,6 +272,10 @@ jobs:
       - name: Synology 內核原始碼 Source (25/06/11)
         run: |
           # 下載並解壓
+          if [ -z "$KERNEL_VER_SERIES" ]; then
+            echo "::error::KERNEL_VER_SERIES is not set, cannot download kernel source"
+            exit 1
+          fi
           wget -O linux-${KERNEL_VER_SERIES}.x.txz "${BASE_TC_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_SERIES}.x.txz"
           tar xJf linux-${KERNEL_VER_SERIES}.x.txz
 
@@ -274,6 +283,10 @@ jobs:
         run: |
           # https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
           # 下載並解壓
+          if [ -z "$TOOLCHAIN_URL" ]; then
+            echo "::error::TOOLCHAIN_URL is not set, cannot download toolchain"
+            exit 1
+          fi
           wget -O toolchain.txz "${TOOLCHAIN_URL}"
           tar xJf toolchain.txz
 
@@ -328,13 +341,17 @@ jobs:
 
           # 2) aq_compat.h 處理 page_ref_count
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
-          # sed -i '/static inline int page_ref_count/,/^#endif/c\
-          # #endif /* page_ref_count fallback removed */\
-          # ' "$FILE"
-          sed -i '/static inline int page_ref_count/,/^#endif/c\
-          #endif /* page_ref_count fallback removed */' "$FILE"
+          if [ -f "$FILE" ]; then
+            sed -i '/static inline int page_ref_count/,/^#endif/c #endif /* page_ref_count fallback removed */' "$FILE"
+          else
+            echo "::warning::aq_compat.h not found, skipping page_ref_count fix"
+          fi
 
           # 3) 編譯
+          if [ -z "$KERNEL_SRC" ]; then
+            echo "::error::KERNEL_SRC is not set, cannot compile module"
+            exit 1
+          fi
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts
@@ -359,10 +376,13 @@ jobs:
           # 會放進 lib/modules/$KERNEL_VER/
           # 2) 建立 driver 套件骨架（spk/atlantic）
           # ./mk/spksrc.create.sh driver/atlantic
-          ls mk/
           bash ./mk/spksrc.create.sh driver/atlantic
 
           # 3) 建立模組目的資料夾並複製
+          if [ -z "$KERNEL_VER" ]; then
+            echo "::error::KERNEL_VER is not set, cannot copy kernel module"
+            exit 1
+          fi
           install -D \
             "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" \
             "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"

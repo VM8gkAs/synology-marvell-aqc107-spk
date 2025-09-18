@@ -212,7 +212,7 @@ jobs:
           # ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^_]+)-GPL.txz/\1/')
           # echo "$CPU_SERIES → ARCH FINDED: $ARCH_FINDED"
           # ---------- ARCH_FINDED ----------
-          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL\.txz/\1/')
+          ARCH_FINDED=$(echo "$TOOLCHAIN_FILE_NAME" | sed -E 's/.*_([^-]+)-GPL.txz/\1/')
 
           if [ -z "$ARCH_FINDED" ]; then
             echo "::error::無法由檔名解析架構，檔名=$TOOLCHAIN_FILE_NAME"
@@ -265,6 +265,10 @@ jobs:
           # 1) 設定 REPO_URL 並下載 aqc107.cfg
           MY_REPO_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main"
           curl -L -o aqc107.cfg ${MY_REPO_URL}/kernel-config-append/aqc107.cfg
+          if [ ! -f "aqc107.cfg" ]; then
+            echo "::error::Failed to download aqc107.cfg from repository"
+            exit 1
+          fi
           # 2) 宣告 REPO_URL
           echo "REPO_URL=${MY_REPO_URL}" >> $GITHUB_ENV
 
@@ -275,8 +279,13 @@ jobs:
             echo "::error::KERNEL_VER_SERIES is not set, cannot download kernel source"
             exit 1
           fi
-          wget -O linux-${KERNEL_VER_SERIES}.x.txz "${BASE_TC_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_SERIES}.x.txz"
-          tar xJf linux-${KERNEL_VER_SERIES}.x.txz
+          KERNEL_SRC_FILE="linux-${KERNEL_VER_SERIES}.x.txz"
+          wget -O "$KERNEL_SRC_FILE" "${BASE_TC_URL}/Synology%20NAS%20GPL%20Source/${DSM_TAG}/${CPU_SERIES}/linux-${KERNEL_VER_SERIES}.x.txz"
+          if [ ! -f "$KERNEL_SRC_FILE" ]; then
+            echo "::error::Failed to download kernel source file"
+            exit 1
+          fi
+          tar xJf "$KERNEL_SRC_FILE"
 
       - name: Synology 交叉編譯工具鏈 ToolChain (25/06/11)
         run: |
@@ -287,15 +296,31 @@ jobs:
             exit 1
           fi
           wget -O toolchain.txz "${TOOLCHAIN_URL}"
+          if [ ! -f "toolchain.txz" ]; then
+            echo "::error::Failed to download toolchain file"
+            exit 1
+          fi
           tar xJf toolchain.txz
 
       - name: 驅動 Marvell AQC107 (25/06/11)
         run: |
           # 1) 下載並解壓
+          if [ -z "$PKG_SOURCE_URL" ]; then
+            echo "::error::PKG_SOURCE_URL is not set, cannot download driver"
+            exit 1
+          fi
           wget -q -O marvell.zip "${PKG_SOURCE_URL}"
+          if [ ! -f "marvell.zip" ]; then
+            echo "::error::Failed to download Marvell driver file"
+            exit 1
+          fi
           # 2) 只解出 atlantic.tar.gz
           PSTF_PATH=$(unzip -Z1 marvell.zip | grep -i -m1 -E "(^|/)${PKG_SOURCE_TARGET_FILE}$")
           unzip -j marvell.zip "${PSTF_PATH}"
+          if [ ! -f "atlantic.tar.gz" ]; then
+            echo "::error::Failed to extract atlantic.tar.gz from Marvell driver archive"
+            exit 1
+          fi
           # 3) 把 Linux/ 這一層 strip 掉
           tar -xzf atlantic.tar.gz \
               --strip-components=1 \

@@ -107,7 +107,6 @@ jobs:
       - name: Get NAS specific information
         run: |
           set -ex
-          trap 'echo "::error::失敗於 ${BASH_SOURCE}:${LINENO} - 指令: $BASH_COMMAND"' ERR
 
           # 1) plus 回復原始 + (ds1821plus → ds1821+ / rs2423rpplus → rs2423rp+)
           MODEL="$(echo "$DEVICE" | sed 's/plus$/+/')"

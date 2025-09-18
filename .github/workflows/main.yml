@@ -402,6 +402,19 @@ jobs:
           echo "TOOLCHAIN_URL: $TOOLCHAIN_URL"
           echo "============================"
           echo "KERNEL_ARCH=$KERNEL_ARCH" >> $GITHUB_ENV
+          # Map ARCH to SPKSRC_ARCH
+          case "$ARCH" in
+            x86_64)
+              SPKSRC_ARCH="x64"
+              ;;
+            x86)
+              SPKSRC_ARCH="x86"
+              ;;
+            *)
+              SPKSRC_ARCH="$ARCH"
+              ;;
+          esac
+          echo "SPKSRC_ARCH=$SPKSRC_ARCH" >> $GITHUB_ENV
           # 8) 取下載網址方便之後下載
           # TOOLCHAIN_URL=$(echo "$TOOLCHAIN_WEBFOLDER_CONTENT" | grep -B2 "${TOOLCHAIN_FILE_NAME}" | grep -oP '<a href="\K[^"]+' | head -n1)
 
@@ -665,10 +678,26 @@ jobs:
           cd spksrc
           # 2) TCVERSION - DSM 主版號 7.x, arch - CPU 架構
           TCVERSION=${DSM_TAG%-*}
-          make TCVERSION=${TCVERSION} arch-${ARCH} package-${PKG_NAME}
+
+          # 3) 映射架構名稱到 spksrc 格式
+          case "${ARCH}" in
+            "x86_64")
+              SPKSRC_ARCH="x64"
+              ;;
+            "x86")
+              SPKSRC_ARCH="x86"
+              ;;
+            *)
+              SPKSRC_ARCH="${ARCH}"
+              ;;
+          esac
+
+          echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_ENV
+          echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, SPKSRC_ARCH=${SPKSRC_ARCH}"
+          make TCVERSION=${TCVERSION} arch-${SPKSRC_ARCH} package-${PKG_NAME}
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}.spk"
-          path: "spksrc/output/${{ env.ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.ARCH }}.spk"
+          path: "spksrc/output/${{ env.SPKSRC_ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.SPKSRC_ARCH }}.spk"

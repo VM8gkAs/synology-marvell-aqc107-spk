@@ -3,7 +3,7 @@ SPK_VERS = 2.5.12
 SPK_REV = 1
 SPK_ICON = src/atlantic.png
 
-DEPENDS = cross/atlantic
+DEPENDS =
 
 MAINTAINER = your-maintainer
 DESCRIPTION = Marvell AQC107 10GbE Network Driver for Synology NAS

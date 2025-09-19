@@ -631,7 +631,7 @@ jobs:
           if [ -d "${GITHUB_WORKSPACE}/packages/driver/atlantic" ]; then
             echo "Source directory exists, attempting to copy files..."
             ls -la "${GITHUB_WORKSPACE}/packages/driver/atlantic/" 2>/dev/null || echo "No files found"
-            cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/"* spk/atlantic/ 2>/dev/null && echo "Files copied successfully" || echo "Copy failed or no files to copy"
+            cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/"* spk/atlantic/ 2>/dev/null && echo "SPK files copied successfully" || echo "SPK copy failed or no files to copy"
           else
             echo "::warning::Source directory does not exist"
           fi
@@ -642,7 +642,7 @@ jobs:
             echo 'SPK_NAME = atlantic' > spk/atlantic/Makefile
             echo 'SPK_VERS = 2.5.12' >> spk/atlantic/Makefile
             echo 'SPK_REV = 1' >> spk/atlantic/Makefile
-            echo 'DEPENDS = cross/atlantic' >> spk/atlantic/Makefile
+            echo 'DEPENDS =' >> spk/atlantic/Makefile
             echo 'MAINTAINER = your-maintainer' >> spk/atlantic/Makefile
             echo 'DESCRIPTION = Marvell AQC107 10GbE Network Driver' >> spk/atlantic/Makefile
             echo 'include ../../mk/spksrc.spk.mk' >> spk/atlantic/Makefile
@@ -725,9 +725,34 @@ jobs:
               ;;
           esac
 
-          echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_OUTPUT
-          echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, CPU_SERIES=${CPU_SERIES}, SPKSRC_ARCH=${SPKSRC_ARCH}"
-          make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} package-${PKG_NAME}
+          # List available targets to debug
+          echo "Available make targets:"
+          make help 2>/dev/null | head -20 || echo "No help target available"
+          
+          # Check if atlantic package exists
+          if [ -f "spk/atlantic/Makefile" ]; then
+            echo "Atlantic package Makefile found"
+            ls -la spk/atlantic/
+          else
+            echo "Atlantic package Makefile not found"
+            ls -la spk/ 2>/dev/null || echo "No spk directory"
+          fi
+          
+          # Try to build using the spk directory approach
+          echo "Trying to build using spk/atlantic target..."
+          if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk/atlantic; then
+            echo "spk/atlantic target succeeded"
+          else
+            echo "spk/atlantic failed, trying other approaches..."
+            # Try different target names
+            echo "Trying spk-atlantic target..."
+            if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk-atlantic; then
+              echo "spk-atlantic target succeeded"
+            else
+              echo "spk-atlantic failed, trying atlantic target..."
+              make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} atlantic
+            fi
+          fi
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4

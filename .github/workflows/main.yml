@@ -673,6 +673,7 @@ jobs:
           make setup
 
       - name: 建置 .spk
+        id: build-spk
         run: |
           # 1) 切換目錄
           cd spksrc
@@ -724,12 +725,12 @@ jobs:
               ;;
           esac
 
-          echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_ENV
+          echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_OUTPUT
           echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, CPU_SERIES=${CPU_SERIES}, SPKSRC_ARCH=${SPKSRC_ARCH}"
-          make TCVERSION=${TCVERSION} arch-${SPKSRC_ARCH} package-${PKG_NAME}
+          make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} package-${PKG_NAME}
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}.spk"
-          path: "spksrc/output/${{ env.SPKSRC_ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.SPKSRC_ARCH }}.spk"
+          path: "spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ steps.build-spk.outputs.SPKSRC_ARCH }}.spk"

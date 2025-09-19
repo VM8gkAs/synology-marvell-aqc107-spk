@@ -725,6 +725,9 @@ jobs:
               ;;
           esac
 
+          echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_OUTPUT
+          echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, CPU_SERIES=${CPU_SERIES}, SPKSRC_ARCH=${SPKSRC_ARCH}"
+
           # List available targets to debug
           echo "Available make targets:"
           make help 2>/dev/null | head -20 || echo "No help target available"

@@ -745,20 +745,43 @@ jobs:
           echo "Trying to build using spk/atlantic target..."
           if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk/atlantic; then
             echo "spk/atlantic target succeeded"
+            echo "Build completed successfully"
           else
             echo "spk/atlantic failed, trying other approaches..."
             # Try different target names
             echo "Trying spk-atlantic target..."
             if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk-atlantic; then
               echo "spk-atlantic target succeeded"
+              echo "Build completed successfully"
             else
               echo "spk-atlantic failed, trying atlantic target..."
-              make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} atlantic
+              if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} atlantic; then
+                echo "atlantic target succeeded"
+                echo "Build completed successfully"
+              else
+                echo "All build targets failed"
+                echo "Checking make help for available targets..."
+                make help 2>/dev/null | grep -i atlantic || echo "No atlantic targets found in help"
+              fi
             fi
           fi
+
+          # Debug: List the output directory contents
+          echo "Contents of spksrc/output directory:"
+          find spksrc/output -name "*.spk" 2>/dev/null || echo "No .spk files found in spksrc/output"
+          ls -la spksrc/output/ 2>/dev/null || echo "spksrc/output directory not found"
+          
+          # Debug: Check for any atlantic-related files
+          echo "Searching for atlantic SPK files:"
+          find . -name "*atlantic*.spk" 2>/dev/null || echo "No atlantic SPK files found anywhere"
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}.spk"
-          path: "spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ steps.build-spk.outputs.SPKSRC_ARCH }}.spk"
+          path: |
+            spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ steps.build-spk.outputs.SPKSRC_ARCH }}.spk
+            spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/*.spk
+            spksrc/output/*/${{ env.PKG_NAME }}*.spk
+            spksrc/packages/*/target/*.spk
+            **/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}*.spk

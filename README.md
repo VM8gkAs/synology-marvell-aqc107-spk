@@ -1,74 +1,72 @@
 # Synology Marvell Atlantic Driver (AQC Series)
 
-本倉庫提供了一個完整的 GitHub Actions 流程，自動編譯並打包 **Marvell Atlantic 驅動程式** (支援 AQC100/107/108/109/111/112/113/114/115/116 全系列) 為 Synology DSM 7.x 原生 SPK 套件。
+自動編譯並打包 **Marvell Atlantic 驅動程式** 為 Synology DSM 7.x SPK 套件。
 
-## 支援的網卡型號
+## 支援網卡
 
-驅動程式支援以下 Marvell AQC 系列網卡：
-- **AQC100** 系列 - 1GbE
-- **AQC107/108/109** 系列 - 10GbE/5GbE/2.5GbE
-- **AQC111/112** 系列 - 5GbE/2.5GbE  
-- **AQC113/114/115/116** 系列 - 最新一代多速率網卡
-- **S/C 後綴變體** - Server/OEM 特殊版本
+完整支援 Marvell AQC 系列：
+- **AQC100** - 1GbE
+- **AQC107/108/109** - 10GbE/5GbE/2.5GbE
+- **AQC111/112** - 5GbE/2.5GbE  
+- **AQC113/114/115/116** - 最新多速率網卡
+- **S/C 變體** - Server/OEM 版本
 
-## 自動化流程
+## 支援機型
 
-1. 下載並解壓 Synology 官方交叉編譯工具鏈與內核原始碼  
-2. 下載並編譯 Marvell Atlantic 2.5.12 驅動模組  
-3. 將編譯好的 `atlantic.ko` 打包成 DSM 原生 SPK 套件  
-4. 將產物（`.ko` 與 `.spk`）作為 Actions Artifact 發布  
+透過 GitHub Actions 預設配置支援以下機型：
 
----
+| 機型 | CPU | DSM | Kernel | 狀態 |
+|------|-----|-----|--------|------|
+| DS1621+ | v1000 | 7.2 | 4.4.302 | ✅ |
+| DS1821+ | v1000 | 7.2 | 4.4.302 | ✅ |
+| RS2821RP+ | v1000 | 7.2 | 4.4.302 | ✅ |
+| DS1522+ | r1000nk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
+| DS423+ | geminilakenk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
+| DS723+ | r1000nk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
+| DS923+ | r1000nk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
+| DS224+ | geminilakenk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
+| DS1825+ | v1000nk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
+| DS925+ | v1000nk | 7.3 | 5.10.55 | ⚠️ 工具鏈未釋出 |
 
-## 功能亮點
-
-- **一鍵編譯 + 打包**  
-  Push 或手動觸發就能跑完整流水線，無需本地搭建編譯環境  
-- **自動產出可在「套件中心」安裝的 SPK**  
-- **MIT 開源許可**，自由訂製、二次發布
-
----
-
-## 目標支持
-
-- DS1821+（DSM 7.2 / Linux 4.4.302）
-
----
+> ⚠️ DSM 7.3 工具鏈尚未由 Synology 正式釋出，相關機型暫時無法構建
 
 ## 快速開始
 
-1. Fork 本倉庫  
-2. 進入 Settings → Secrets，添加以下 Secrets（可選覆蓋環境變數）  
-   - `DSM_TAG`  
-   - `KERNEL_VER`  
-   - …  
-3. Push 到 `main` 分支，或手動在 Actions 面板觸發 "Build & Package Marvell Atlantic Driver"  
-4. 編譯完成後，在對應的 Workflow Run 頁面下載 `.spk`，直接拖入 DSM「套件中心」→「手動安裝」
+### 方法 1：使用預設配置（推薦）
 
----
+1. Fork 本倉庫
+2. 前往 **Actions** → **Build & Package Marvell Atlantic Driver**
+3. 點擊 **Run workflow**
+4. 選擇 **preset** 模式，選擇您的機型（例：DS1821+ (v1000, DSM 7.2)）
+5. 執行完成後下載 `.spk` 檔案
+6. 在 DSM **套件中心** → **手動安裝** 安裝
 
-## 📚 文件說明
+### 方法 2：自訂參數
 
-### 專案結構
-- `.github/workflows/main.yml` - 核心 CI/CD 流程腳本  
-- `packages/driver/atlantic/` - SPK 套件定義與元數據  
-- `packages/cross/atlantic/` - 交叉編譯定義  
-- `kernel-config-append/aqc107.cfg` - Kernel 配置  
-- `patches/atlantic/2.5.12/` - 驅動相容性補丁  
+如需指定 DSM 版本或機型組合：
+1. 選擇 **custom** 模式
+2. 填入對應參數（DSM 版本、機型、CPU 系列、架構）
+3. 執行並下載
 
-### 技術文件
-完整的技術文件請參閱 **[docs/](./docs/)** 目錄：
+## 技術文件
 
-- **[Workflow 維護指南](./docs/WORKFLOW_MAINTENANCE.md)** - CI/CD 維護與共用程式碼管理策略
-- **[Kernel 版本對照表](./docs/KERNEL_VERSION_REFERENCE.md)** - DSM CPU 與 Kernel 版本映射
-- **[SPK 命名規範](./docs/NAMING_CONVENTION.md)** - 套件命名格式與發布建議
+- **[DSM 版本指南](./docs/DSM_VERSION_GUIDE.md)** - 版本選擇與相容性
+- **[CPU/Kernel 對照](./docs/KERNEL_VERSION_REFERENCE.md)** - 機型與 Kernel 對應
 
-### 授權
-- `LICENSE` - MIT License
+## 專案結構
 
----
+```
+.github/workflows/main.yml  # CI/CD 流程
+kernel-config-append/       # Kernel 配置
+packages/                   # SPK 套件定義
+patches/                    # 驅動相容性補丁
+docs/                       # 技術文件
+```
 
-## 貢獻&支持
+## 授權
 
-歡迎提交 Issue、Pull Request，或在 Discussions 裡交流使用心得。  
-如果你遇到任何相容性問題，也請在 Issue 中回饋，謝謝！
+MIT License - 自由使用、修改、發布
+
+## 貢獻
+
+歡迎提交 Issue 或 Pull Request！

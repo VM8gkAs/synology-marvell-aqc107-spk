@@ -780,6 +780,8 @@ jobs:
 
       - name: 建立 SPK 骨架 and 複製 .ko
         run: |
+          set -ex
+          
           # 1) 切換目錄
           cd spksrc
 
@@ -787,46 +789,60 @@ jobs:
           mkdir -p spk/atlantic
           mkdir -p spk/atlantic/src
 
-          # 3) 嘗試複製我們的套件檔案到 spksrc 框架
-          echo "Source directory: ${GITHUB_WORKSPACE}/packages/driver/atlantic/"
-          if [ -d "${GITHUB_WORKSPACE}/packages/driver/atlantic" ]; then
-            echo "Source directory exists, attempting to copy files..."
-            ls -la "${GITHUB_WORKSPACE}/packages/driver/atlantic/" 2>/dev/null || echo "No files found"
-            cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/"* spk/atlantic/ 2>/dev/null && echo "SPK files copied successfully" || echo "SPK copy failed or no files to copy"
-          else
-            echo "::warning::Source directory does not exist"
+          # 3) 複製我們的套件檔案到 spksrc 框架
+          echo "=== Copying package files ==="
+          echo "Source: ${GITHUB_WORKSPACE}/packages/driver/atlantic/"
+          echo "Target: $(pwd)/spk/atlantic/"
+          
+          # 驗證源目錄存在
+          if [ ! -d "${GITHUB_WORKSPACE}/packages/driver/atlantic" ]; then
+            echo "::error::Source directory does not exist: ${GITHUB_WORKSPACE}/packages/driver/atlantic"
+            exit 1
           fi
+          
+          # 顯示源目錄內容
+          echo "Source directory contents:"
+          ls -la "${GITHUB_WORKSPACE}/packages/driver/atlantic/"
+          
+          # 複製 Makefile 和 src 目錄
+          cp "${GITHUB_WORKSPACE}/packages/driver/atlantic/Makefile" spk/atlantic/
+          cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/src"/* spk/atlantic/src/
+          
+          echo "Files copied successfully"
+          echo "Target directory contents:"
+          ls -la spk/atlantic/
 
-          # 4) 檢查是否需要建立基本檔案
-          if [ ! -f "spk/atlantic/Makefile" ]; then
-            echo "Creating basic Makefile..."
-            echo 'SPK_NAME = atlantic' > spk/atlantic/Makefile
-            echo 'SPK_VERS = 2.5.12' >> spk/atlantic/Makefile
-            echo 'SPK_REV = 1' >> spk/atlantic/Makefile
-            echo 'DEPENDS =' >> spk/atlantic/Makefile
-            echo 'MAINTAINER = your-maintainer' >> spk/atlantic/Makefile
-            echo 'DESCRIPTION = Marvell AQC107 10GbE Network Driver' >> spk/atlantic/Makefile
-            echo 'include ../../mk/spksrc.spk.mk' >> spk/atlantic/Makefile
-          fi
-
-          # 5) 編好的 atlantic.ko 已在 $DRIVER_DIR/atlantic/atlantic.ko
+          # 4) 驗證 .ko 模組存在
           if [ -z "$KERNEL_VER" ]; then
             echo "::error::KERNEL_VER is not set"
             exit 1
           fi
-
-          # 6) 建立模組目的資料夾並複製
-          mkdir -p "spk/atlantic/files/lib/modules/${KERNEL_VER}"
-          if [ -f "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" ]; then
-            install -D "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
-            echo "Kernel module copied successfully"
-          else
+          
+          if [ ! -f "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" ]; then
             echo "::error::Kernel module not found: ${DRIVER_DIR}/${PKG_NAME}/atlantic.ko"
+            echo "Available files:"
+            ls -la "${DRIVER_DIR}/${PKG_NAME}/" || echo "Directory does not exist"
             exit 1
           fi
 
-          # 7) 更新版本號
+          # 5) 建立模組目的資料夾並複製
+          mkdir -p "spk/atlantic/files/lib/modules/${KERNEL_VER}"
+          install -D "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
+          echo "Kernel module copied to: spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
+          
+          # 驗證複製成功
+          if [ -f "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko" ]; then
+            echo "✓ Kernel module successfully installed"
+            ls -lh "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
+          else
+            echo "::error::Failed to copy kernel module"
+            exit 1
+          fi
+
+          # 6) 更新版本號
           sed -i "s/^SPK_VERS.*/SPK_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
+          
+          echo "=== SPK skeleton setup complete ==="
 
       - name: 下載工具鏈 (一次性節省後續 cache)
         run: |
@@ -900,43 +916,28 @@ jobs:
           echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_OUTPUT
           echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, CPU_SERIES=${CPU_SERIES}, SPKSRC_ARCH=${SPKSRC_ARCH}"
 
-          # List available targets to debug
-          echo "Available make targets:"
-          make help 2>/dev/null | head -20 || echo "No help target available"
-          
-          # Check if atlantic package exists
-          if [ -f "spk/atlantic/Makefile" ]; then
-            echo "Atlantic package Makefile found"
-            ls -la spk/atlantic/
-          else
-            echo "Atlantic package Makefile not found"
+          # 驗證 SPK 套件目錄存在
+          if [ ! -f "spk/atlantic/Makefile" ]; then
+            echo "::error::Atlantic package Makefile not found"
             ls -la spk/ 2>/dev/null || echo "No spk directory"
+            exit 1
           fi
           
-          # Try to build using the spk directory approach
-          echo "Trying to build using spk/atlantic target..."
-          if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk/atlantic; then
-            echo "spk/atlantic target succeeded"
-            echo "Build completed successfully"
-          else
-            echo "spk/atlantic failed, trying other approaches..."
-            # Try different target names
-            echo "Trying spk-atlantic target..."
-            if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk-atlantic; then
-              echo "spk-atlantic target succeeded"
-              echo "Build completed successfully"
-            else
-              echo "spk-atlantic failed, trying atlantic target..."
-              if make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} atlantic; then
-                echo "atlantic target succeeded"
-                echo "Build completed successfully"
-              else
-                echo "All build targets failed"
-                echo "Checking make help for available targets..."
-                make help 2>/dev/null | grep -i atlantic || echo "No atlantic targets found in help"
-              fi
-            fi
-          fi
+          echo "=== SPK package structure ==="
+          ls -la spk/atlantic/
+          echo "Files to be packaged:"
+          find spk/atlantic/files -type f 2>/dev/null || echo "No files directory"
+          
+          # 構建 SPK 套件
+          echo "=== Building SPK package ==="
+          make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk-atlantic || {
+            echo "::error::SPK build failed"
+            echo "Build log:"
+            cat spk/atlantic/*.log 2>/dev/null || echo "No log files"
+            exit 1
+          }
+          
+          echo "✓ SPK build completed successfully"
 
           # === 構建完成，檢查輸出 ===
           echo "=== Build Output Summary ==="
@@ -948,23 +949,31 @@ jobs:
           echo "Architecture: ${SPKSRC_ARCH}"
           echo "==========================="
           
-          # 檢查輸出目錄
-          echo "\nSearching for built SPK files..."
-          find spksrc/output -name "*.spk" 2>/dev/null || echo "No .spk files in spksrc/output"
-          find . -name "*atlantic*.spk" 2>/dev/null || echo "No atlantic SPK files found"
+          # 搜尋 SPK 檔案
+          echo "\n=== Searching for SPK files ==="
+          SPK_FOUND=false
           
-          # 列出可能的輸出位置
-          echo "\nChecking possible output locations:"
-          ls -la spksrc/output/${SPKSRC_ARCH}/ 2>/dev/null || echo "No output/${SPKSRC_ARCH}/ directory"
-          ls -la spksrc/packages/*/target/ 2>/dev/null || echo "No packages/*/target/ directories"
+          # 檢查所有可能的輸出位置
+          for dir in "packages/${SPKSRC_ARCH}" "packages/all" "spk/atlantic/work-${SPKSRC_ARCH}" "."; do
+            if find "$dir" -name "*atlantic*.spk" -type f 2>/dev/null | grep -q .; then
+              echo "✓ Found SPK in: $dir"
+              find "$dir" -name "*atlantic*.spk" -type f -ls
+              SPK_FOUND=true
+            fi
+          done
+          
+          if [ "$SPK_FOUND" = "false" ]; then
+            echo "::warning::No SPK files found, listing all directories:"
+            find . -type d -name "*${SPKSRC_ARCH}*" 2>/dev/null || echo "No arch-specific directories"
+            find . -name "*.spk" -type f 2>/dev/null || echo "No .spk files anywhere"
+          fi
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ matrix.dsm_ver }}-${{ matrix.cpu_series }}_1"
           path: |
-            spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/*.spk
-            spksrc/output/*/*.spk
-            spksrc/packages/*/target/*.spk
-            **/*atlantic*.spk
-          if-no-files-found: warn
+            spksrc/packages/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/*atlantic*.spk
+            spksrc/packages/all/*atlantic*.spk
+            spksrc/**/*atlantic*.spk
+          if-no-files-found: error

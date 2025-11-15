@@ -5,23 +5,53 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      dsm_ver_full:
-        description: "完整 DSM build number"
+      # 模式選擇：預設機型或自訂參數
+      build_mode:
+        description: "構建模式 (preset=預設機型 / custom=自訂參數)"
+        required: true
+        type: choice
+        options:
+          - "preset"
+          - "custom"
+        default: "preset"
+      
+      # === 預設模式：快速選擇常見機型 ===
+      preset_model:
+        description: "預設機型 (僅 preset 模式有效)"
         required: false
-        default: "7.2.2-72806-3"
+        type: choice
+        options:
+          - "DS1621+ (v1000, DSM 7.2)"        # 2021 年 16xx 系列
+          - "DS1821+ (v1000, DSM 7.2)"        # 2021 年 18xx 系列
+          - "DS1821+ (v1000nk, DSM 7.3)"
+          - "RS2821RP+ (v1000, DSM 7.2)"      # 2021 年 RS 系列
+          - "DS1522+ (r1000nk, DSM 7.3)"      # 2022 年 15xx 系列
+          - "DS423+ (geminilakenk, DSM 7.3)"  # 2023 年 4xx 系列
+          - "DS723+ (r1000nk, DSM 7.3)"       # 2023 年 7xx 系列
+          - "DS923+ (r1000nk, DSM 7.3)"       # 2023 年 9xx 系列
+          - "DS224+ (geminilakenk, DSM 7.3)"  # 2024 年 2xx 系列
+          - "DS1825+ (v1000nk, DSM 7.3)"      # 2025 年 18xx 系列
+          - "DS925+ (v1000nk, DSM 7.3)"       # 2025 年 9xx 系列
+        default: "DS1821+ (v1000, DSM 7.2)"
+      
+      # === 自訂模式：完全客製化參數 ===
+      dsm_ver_full:
+        description: "完整 DSM build (僅 custom 模式，例: 7.3.1-86003)"
+        required: false
+        default: "7.2.2-72806-4"
         type: string
       device_list:
-        description: "機型清單 (逗號分隔)"
+        description: "機型清單，逗號分隔 (僅 custom 模式，例: ds1821plus,ds923plus)"
         required: false
         default: "ds1821plus"
         type: string
       cpu_series_list:
-        description: "CPU系列清單 (逗號分隔)"
+        description: "CPU 系列，逗號分隔 (僅 custom 模式，例: v1000,r1000nk)"
         required: false
         default: "v1000"
         type: string
       arch_list:
-        description: "架構清單 (逗號分隔)"
+        description: "架構清單，逗號分隔 (僅 custom 模式，例: x86_64)"
         required: false
         default: "x86_64"
         type: string
@@ -38,42 +68,119 @@ env:
   ARCHIVE_TC_URL: "https://archive.synology.com/download/ToolChain"
   ARCHIVE_OS_URL: "https://archive.synology.com/download/Os/DSM"
   SPKSRC_REPO: "https://github.com/SynoCommunity/spksrc.git"
-  # 資源網址 250611 更新
-  # https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/7.2-72806
-  # https://archive.synology.com/download/ToolChain/toolchain/7.2-72806
-  # https://www.marvell.com/support/downloads.html
-
+  
+  # 預設機型配置映射表 (JSON 格式)
+  # 排序規則：年代 (16→18→22→23→24→25) → DSM 版本 (7.2→7.3)
+  # DSM 版本說明：
+  #   - DSM 7.2: 使用 7.2.2-72806-4 (最新穩定版，2025-11-15)
+  #   - DSM 7.3: 使用 7.3.1-86003 (⚠️ 工具鏈尚未釋出，暫時無法構建)
+  #   - 關鍵：工具鏈 URL 使用 build number (7.2-72806)，而非完整版本號
+  #   - 相容性：7.2.x-72806-y 所有子版本使用相同工具鏈，驅動通用
+  PRESET_CONFIGS: |
+    {
+      "DS1621+ (v1000, DSM 7.2)": {"device": "ds1621plus", "cpu_series": "v1000", "arch": "x86_64", "dsm_ver": "7.2.2-72806-4"},
+      "DS1821+ (v1000, DSM 7.2)": {"device": "ds1821plus", "cpu_series": "v1000", "arch": "x86_64", "dsm_ver": "7.2.2-72806-4"},
+      "DS1821+ (v1000nk, DSM 7.3)": {"device": "ds1821plus", "cpu_series": "v1000nk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "RS2821RP+ (v1000, DSM 7.2)": {"device": "rs2821rpplus", "cpu_series": "v1000", "arch": "x86_64", "dsm_ver": "7.2.2-72806-4"},
+      "DS1522+ (r1000nk, DSM 7.3)": {"device": "ds1522plus", "cpu_series": "r1000nk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "DS423+ (geminilakenk, DSM 7.3)": {"device": "ds423plus", "cpu_series": "geminilakenk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "DS723+ (r1000nk, DSM 7.3)": {"device": "ds723plus", "cpu_series": "r1000nk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "DS923+ (r1000nk, DSM 7.3)": {"device": "ds923plus", "cpu_series": "r1000nk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "DS224+ (geminilakenk, DSM 7.3)": {"device": "ds224plus", "cpu_series": "geminilakenk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "DS1825+ (v1000nk, DSM 7.3)": {"device": "ds1825plus", "cpu_series": "v1000nk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"},
+      "DS925+ (v1000nk, DSM 7.3)": {"device": "ds925plus", "cpu_series": "v1000nk", "arch": "x86_64", "dsm_ver": "7.3.1-86003"}
+    }
+  
+  # 資源網址 (2025-11-15 更新)
+  # - ToolChain GPL Source: https://archive.synology.com/download/ToolChain/Synology%20NAS%20GPL%20Source/
+  # - ToolChain Toolchain: https://archive.synology.com/download/ToolChain/toolchain/
+  # - Marvell Downloads: https://www.marvell.com/support/downloads.html
+  # DS1821+ 7.2-72806 範例
+  # - ToolChain : https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
+          
 jobs:
   init:
     runs-on: ubuntu-latest
     steps:
-      - name: Install jq        # jq 必要
+      - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Generate matrix
+      - name: Generate matrix from inputs
         id: gen
         run: |
+          set -e
+          
+          # Push 事件：使用預設配置
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            printf 'matrix=%s\n' '[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64"}]' >> "$GITHUB_OUTPUT"
-          else
-          # 解析輸入（逗號分隔）
-            IFS=',' read -ra DEVICES <<< "${{ inputs.device_list }}"
-            IFS=',' read -ra CPUS   <<< "${{ inputs.cpu_series_list }}"
-            IFS=',' read -ra ARCHS  <<< "${{ inputs.arch_list }}"
-
-            # zip 三條陣列 → 物件陣列
-            jq -n --argjson d "$(printf '%s\n' "${DEVICES[@]}" | jq -R . | jq -s .)" \
-                  --argjson c "$(printf '%s\n' "${CPUS[@]}"   | jq -R . | jq -s .)" \
-                  --argjson a "$(printf '%s\n' "${ARCHS[@]}"  | jq -R . | jq -s .)" '
-              [ range(0; ($d|length)) | {
-                  device:   $d[.],
-                  cpu_series:$c[.],
-                  arch:     $a[.]
-                } ]' > matrix.json
-            json=$(jq -c . matrix.json)
-            printf 'matrix=%s\n' "$json" >> "$GITHUB_OUTPUT"
+            printf 'matrix=%s\n' '[{"device":"ds1821plus","cpu_series":"v1000","arch":"x86_64","dsm_ver":"7.2.2-72806-4"}]' >> "$GITHUB_OUTPUT"
+            printf 'dsm_ver_full=%s\n' "7.2.2-72806-4" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          printf 'dsm_ver_full=%s\n' "${{ inputs.dsm_ver_full || '7.2.2-72806-3' }}" >> "$GITHUB_OUTPUT"
+          
+          # Workflow_dispatch: 根據模式處理
+          BUILD_MODE="${{ inputs.build_mode }}"
+          
+          if [[ "$BUILD_MODE" == "preset" ]]; then
+            # ===== 預設模式：從映射表解析 =====
+            PRESET_MODEL="${{ inputs.preset_model }}"
+            echo "Using preset model: $PRESET_MODEL"
+            
+            # 解析 JSON 配置
+            CONFIG=$(echo '${{ env.PRESET_CONFIGS }}' | jq -r --arg model "$PRESET_MODEL" '.[$model]')
+            
+            if [[ "$CONFIG" == "null" || -z "$CONFIG" ]]; then
+              echo "::error::Invalid preset model: $PRESET_MODEL"
+              exit 1
+            fi
+            
+            DEVICE=$(echo "$CONFIG" | jq -r '.device')
+            CPU_SERIES=$(echo "$CONFIG" | jq -r '.cpu_series')
+            ARCH=$(echo "$CONFIG" | jq -r '.arch')
+            DSM_VER=$(echo "$CONFIG" | jq -r '.dsm_ver')
+            
+            # 產生單一機型 matrix
+            MATRIX=$(jq -n \
+              --arg d "$DEVICE" \
+              --arg c "$CPU_SERIES" \
+              --arg a "$ARCH" \
+              --arg v "$DSM_VER" \
+              '[{device: $d, cpu_series: $c, arch: $a, dsm_ver: $v}]')
+            
+            printf 'matrix=%s\n' "$MATRIX" >> "$GITHUB_OUTPUT"
+            printf 'dsm_ver_full=%s\n' "$DSM_VER" >> "$GITHUB_OUTPUT"
+            
+          else
+            # ===== 自訂模式：解析逗號分隔清單 =====
+            IFS=',' read -ra DEVICES <<< "${{ inputs.device_list }}"
+            IFS=',' read -ra CPUS    <<< "${{ inputs.cpu_series_list }}"
+            IFS=',' read -ra ARCHS   <<< "${{ inputs.arch_list }}"
+            DSM_VER="${{ inputs.dsm_ver_full }}"
+            
+            # 驗證陣列長度一致
+            if [[ ${#DEVICES[@]} -ne ${#CPUS[@]} || ${#DEVICES[@]} -ne ${#ARCHS[@]} ]]; then
+              echo "::error::device_list, cpu_series_list, arch_list 長度必須相同"
+              exit 1
+            fi
+            
+            # 建立 matrix
+            MATRIX=$(jq -n \
+              --argjson d "$(printf '%s\n' "${DEVICES[@]}" | jq -R . | jq -s .)" \
+              --argjson c "$(printf '%s\n' "${CPUS[@]}"    | jq -R . | jq -s .)" \
+              --argjson a "$(printf '%s\n' "${ARCHS[@]}"   | jq -R . | jq -s .)" \
+              --arg v "$DSM_VER" \
+              '[range(0; ($d|length)) | {
+                device:     $d[.],
+                cpu_series: $c[.],
+                arch:       $a[.],
+                dsm_ver:    $v
+              }]')
+            
+            printf 'matrix=%s\n' "$MATRIX" >> "$GITHUB_OUTPUT"
+            printf 'dsm_ver_full=%s\n' "$DSM_VER" >> "$GITHUB_OUTPUT"
+          fi
+          
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       dsm_ver_full: ${{ steps.gen.outputs.dsm_ver_full }}
@@ -85,12 +192,12 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.init.outputs.matrix) }}
-    name: Build - ${{ matrix.device }}
+    name: Build - ${{ matrix.device }} (${{ matrix.dsm_ver }})
     env:
       DEVICE: ${{ matrix.device }}
       CPU_SERIES: ${{ matrix.cpu_series }}
       ARCH: ${{ matrix.arch }}
-      DSM_VER_FULL: ${{ needs.init.outputs.dsm_ver_full }}
+      DSM_VER_FULL: ${{ matrix.dsm_ver }}
       DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}
     steps:
       # —————————— 準備 ——————————
@@ -234,6 +341,7 @@ jobs:
           if [ -z "$TOOLCHAIN_FILE_NAME" ]; then
             echo "No TOOLCHAIN_FILE_NAME found, using fallback for CPU_SERIES: $CPU_SERIES"
             case "$CPU_SERIES" in
+              # DSM 7.2 (Kernel 4.4.302)
               v1000)
                 TOOLCHAIN_FILE_NAME="v1000-gcc1220_glibc236_x86_64-GPL.txz"
                 ;;
@@ -242,6 +350,16 @@ jobs:
                 ;;
               avoton)
                 TOOLCHAIN_FILE_NAME="avoton-gcc493_glibc220_x86_64-GPL.txz"
+                ;;
+              # DSM 7.3 (Kernel 5.10.55) - nk series
+              v1000nk)
+                TOOLCHAIN_FILE_NAME="v1000nk-gcc1220_glibc236_x86_64-GPL.txz"
+                ;;
+              r1000nk)
+                TOOLCHAIN_FILE_NAME="r1000nk-gcc1220_glibc236_x86_64-GPL.txz"
+                ;;
+              geminilakenk)
+                TOOLCHAIN_FILE_NAME="geminilakenk-gcc1220_glibc236_x86_64-GPL.txz"
                 ;;
               *)
                 echo "::error::Unknown CPU_SERIES $CPU_SERIES and no toolchain file found"
@@ -291,12 +409,15 @@ jobs:
             # Last resort: hardcode based on known CPU series
             if [ -z "$ARCH_FINDED" ]; then
               case "$CPU_SERIES" in
-                v1000|braswell|avoton)
+                # x86_64 架構 CPU
+                v1000|v1000nk|r1000|r1000nk|braswell|avoton|geminilake|geminilakenk|apollolake|broadwell|denverton|purley|kvmx64)
                   ARCH_FINDED="x86_64"
                   ;;
-                rtd1296|armada37xx)
+                # ARM64 架構 CPU
+                rtd1296|rtd1619b|armada37xx|epyc7002)
                   ARCH_FINDED="armv8"
                   ;;
+                # ARM 架構 CPU
                 armada38x|armada370)
                   ARCH_FINDED="armv7"
                   ;;
@@ -426,6 +547,7 @@ jobs:
           if [ -z "$TOOLCHAIN_URL" ]; then
             echo "::warning::TOOLCHAIN_URL not found, using fallback for CPU_SERIES: $CPU_SERIES"
             case "$CPU_SERIES" in
+              # DSM 7.2 (Kernel 4.4.302)
               v1000)
                 TOOLCHAIN_URL="https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz"
                 ;;
@@ -435,12 +557,25 @@ jobs:
               avoton)
                 TOOLCHAIN_URL="https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28Avoton%29/avoton-gcc493_glibc220_x86_64-GPL.txz"
                 ;;
+              # DSM 7.3 (Kernel 5.10.55) - 需要實際 URL 驗證
+              v1000nk|r1000nk|geminilakenk)
+                echo "::warning::DSM 7.3 toolchain URL for $CPU_SERIES not available in fallback, may fail"
+                echo "::warning::Please ensure DSM_TAG ${DSM_TAG} has toolchain available online"
+                # 暫時使用可能的 URL 格式，實際使用時會從網頁動態查詢
+                TOOLCHAIN_URL=""
+                ;;
               *)
                 echo "::error::Unknown CPU_SERIES $CPU_SERIES and no toolchain URL found"
                 exit 1
                 ;;
             esac
-            echo "TOOLCHAIN_URL (fallback): $TOOLCHAIN_URL"
+            
+            if [ -n "$TOOLCHAIN_URL" ]; then
+              echo "TOOLCHAIN_URL (fallback): $TOOLCHAIN_URL"
+            else
+              echo "::error::No fallback URL available for $CPU_SERIES, must fetch from web"
+              exit 1
+            fi
           fi
           echo "TOOLCHAIN_URL=$TOOLCHAIN_URL" >> "$GITHUB_ENV"
 
@@ -454,8 +589,32 @@ jobs:
           # KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/')
           KERNEL_VER=$(echo "$TOOLCHAIN_URL" | sed -E 's/.*Linux%20([^%]+)%20.*/\1/')
           if [ -z "$KERNEL_VER" ]; then
-            echo "::error::抓不到 Kernel 版本，TOOLCHAIN_URL=$TOOLCHAIN_URL"
-            exit 1
+            echo "::warning::無法從 TOOLCHAIN_URL 提取 Kernel 版本，使用 CPU 系列 fallback"
+            # Fallback: 根據 CPU 系列設定已知的 Kernel 版本
+            case "$CPU_SERIES" in
+              # DSM 7.2 (Kernel 4.4.302)
+              v1000)
+                KERNEL_VER="4.4.302"
+                ;;
+              braswell)
+                KERNEL_VER="4.4.302"
+                ;;
+              avoton)
+                KERNEL_VER="4.4.302"
+                ;;
+              geminilake|apollolake)
+                KERNEL_VER="4.4.180"
+                ;;
+              # DSM 7.3 (Kernel 5.10.55)
+              v1000nk|r1000nk|geminilakenk)
+                KERNEL_VER="5.10.55"
+                ;;
+              *)
+                echo "::error::無法確定 CPU_SERIES $CPU_SERIES 的 Kernel 版本"
+                exit 1
+                ;;
+            esac
+            echo "使用 fallback Kernel 版本: $KERNEL_VER"
           fi
           echo "KERNEL_VER=$KERNEL_VER" >> $GITHUB_ENV
 
@@ -501,7 +660,6 @@ jobs:
 
       - name: Synology 交叉編譯工具鏈 ToolChain (25/06/11)
         run: |
-          # https://global.synologydownload.com/download/ToolChain/toolchain/7.2-72806/Intel%20x86%20Linux%204.4.302%20%28V1000%29/v1000-gcc1220_glibc236_x86_64-GPL.txz
           # 下載並解壓
           if [ -z "$TOOLCHAIN_URL" ]; then
             echo "::error::TOOLCHAIN_URL is not set, cannot download toolchain"
@@ -607,7 +765,7 @@ jobs:
       - name: 上傳 .ko 模組為 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-ko
+          name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.DSM_TAG }}-${{ matrix.cpu_series }}-ko
           path: ${{ env.DRIVER_DIR }}/${{ env.PKG_NAME }}/*.ko
           if-no-files-found: error
 
@@ -683,6 +841,7 @@ jobs:
           # 3) 映射架構名稱到 spksrc 格式
           # spksrc 使用具體的 CPU 架構名稱，而非通用名稱
           case "${CPU_SERIES}" in
+            # DSM 7.2 CPU 系列
             "v1000")
               SPKSRC_ARCH="v1000"
               ;;
@@ -718,6 +877,16 @@ jobs:
               ;;
             "dockerx64")
               SPKSRC_ARCH="dockerx64"
+              ;;
+            # DSM 7.3 CPU 系列 (nk variants)
+            "v1000nk")
+              SPKSRC_ARCH="v1000nk"
+              ;;
+            "r1000nk")
+              SPKSRC_ARCH="r1000nk"
+              ;;
+            "geminilakenk")
+              SPKSRC_ARCH="geminilakenk"
               ;;
             *)
               # 對於未知的 CPU 系列，使用 CPU_SERIES 作為備用
@@ -766,22 +935,33 @@ jobs:
             fi
           fi
 
-          # Debug: List the output directory contents
-          echo "Contents of spksrc/output directory:"
-          find spksrc/output -name "*.spk" 2>/dev/null || echo "No .spk files found in spksrc/output"
-          ls -la spksrc/output/ 2>/dev/null || echo "spksrc/output directory not found"
+          # === 構建完成，檢查輸出 ===
+          echo "=== Build Output Summary ==="
+          echo "Package: ${PKG_NAME} ${PKG_VERSION}"
+          echo "Device: ${DEVICE}"
+          echo "CPU Series: ${CPU_SERIES}"
+          echo "DSM Version: ${DSM_VER_FULL}"
+          echo "Kernel: ${KERNEL_VER}"
+          echo "Architecture: ${SPKSRC_ARCH}"
+          echo "==========================="
           
-          # Debug: Check for any atlantic-related files
-          echo "Searching for atlantic SPK files:"
-          find . -name "*atlantic*.spk" 2>/dev/null || echo "No atlantic SPK files found anywhere"
+          # 檢查輸出目錄
+          echo "\nSearching for built SPK files..."
+          find spksrc/output -name "*.spk" 2>/dev/null || echo "No .spk files in spksrc/output"
+          find . -name "*atlantic*.spk" 2>/dev/null || echo "No atlantic SPK files found"
+          
+          # 列出可能的輸出位置
+          echo "\nChecking possible output locations:"
+          ls -la spksrc/output/${SPKSRC_ARCH}/ 2>/dev/null || echo "No output/${SPKSRC_ARCH}/ directory"
+          ls -la spksrc/packages/*/target/ 2>/dev/null || echo "No packages/*/target/ directories"
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}.spk"
+          name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.DSM_TAG }}-${{ matrix.cpu_series }}_1"
           path: |
-            spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ steps.build-spk.outputs.SPKSRC_ARCH }}.spk
             spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/*.spk
-            spksrc/output/*/${{ env.PKG_NAME }}*.spk
+            spksrc/output/*/*.spk
             spksrc/packages/*/target/*.spk
-            **/${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}*.spk
+            **/*atlantic*.spk
+          if-no-files-found: warn

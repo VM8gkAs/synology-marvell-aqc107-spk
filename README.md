@@ -36,14 +36,24 @@
 
 ---
 
-## 文件說明
+## 📚 文件說明
 
-- `.github/workflows/build-and-package.yml`  
-  核心 CI 流程腳本  
-- `packages/driver/atlantic/{Makefile,INFO,…}`  
-  spksrc driver 模板，定義包元數據、打包邏輯  
-- `LICENSE`  
-  MIT License
+### 專案結構
+- `.github/workflows/main.yml` - 核心 CI/CD 流程腳本  
+- `packages/driver/atlantic/` - SPK 套件定義與元數據  
+- `packages/cross/atlantic/` - 交叉編譯定義  
+- `kernel-config-append/aqc107.cfg` - Kernel 配置  
+- `patches/atlantic/2.5.12/` - 驅動相容性補丁  
+
+### 技術文件
+完整的技術文件請參閱 **[docs/](./docs/)** 目錄：
+
+- **[Workflow 維護指南](./docs/WORKFLOW_MAINTENANCE.md)** - CI/CD 維護與共用程式碼管理策略
+- **[Kernel 版本對照表](./docs/KERNEL_VERSION_REFERENCE.md)** - DSM CPU 與 Kernel 版本映射
+- **[SPK 命名規範](./docs/NAMING_CONVENTION.md)** - 套件命名格式與發布建議
+
+### 授權
+- `LICENSE` - MIT License
 
 ---
 

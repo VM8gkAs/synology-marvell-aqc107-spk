@@ -5,13 +5,14 @@ SPK_ICON = src/atlantic.png
 
 DEPENDS =
 
-MAINTAINER = your-maintainer
-DESCRIPTION = Marvell AQC107 10GbE Network Driver for Synology NAS
-DISPLAY_NAME = Marvell AQC107 Driver
+MAINTAINER = VM8gkAs
+DESCRIPTION = Marvell AQC107 2.5GbE/5GbE/10GbE Network Driver for Synology NAS
+DESCRIPTION_SPN = Controlador de red Marvell AQC107 para Synology NAS
+DISPLAY_NAME = Marvell AQC107 Atlantic Driver
 STARTABLE = no
-CHANGELOG = "Initial release of Marvell AQC107 driver for Synology NAS"
+CHANGELOG = "v2.5.12: Marvell AQC107 atlantic driver for DSM 7.x"
 
-HOMEPAGE = https://www.marvell.com
+HOMEPAGE = https://github.com/VM8gkAs/synology-marvell-aqc107-spk
 LICENSE = GPL-2.0
 
 SERVICE_SETUP = src/service-setup.sh

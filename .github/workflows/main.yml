@@ -202,7 +202,7 @@ jobs:
     steps:
       # —————————— 準備 ——————————
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Initialize Folder
         run: |
@@ -766,7 +766,7 @@ jobs:
           make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE} -C ${KERNEL_SRC} M=$PWD modules
 
       - name: 上傳 .ko 模組為 Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ matrix.dsm_ver }}-${{ matrix.cpu_series }}-ko
           path: ${{ env.DRIVER_DIR }}/${{ env.PKG_NAME }}/*.ko
@@ -949,7 +949,7 @@ jobs:
           tar -tvf "${SPK_FILENAME}"
 
       - name: 上傳產出的 .spk
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ matrix.dsm_ver }}-${{ matrix.cpu_series }}_1"
           path: |

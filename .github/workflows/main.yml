@@ -831,8 +831,7 @@ jobs:
           # 4. 建立安裝後腳本
           cat > scripts/postinst <<'POSTEOF'
           #!/bin/sh
-          # Synology DSM 使用簡化的模組目錄結構：/lib/modules/*.ko
-          # 而非標準 Linux 的 /lib/modules/$(uname -r)/kernel/drivers/...
+          # Synology DSM 7.x autoload configuration
           
           if [ -f "/var/packages/atlantic/target/lib/modules/atlantic.ko" ]; then
               TARGET_FILE="/lib/modules/atlantic.ko"
@@ -841,40 +840,46 @@ jobs:
               
               echo "=== Marvell AQC107 Driver Installation ==="
               
-              # 如果原本就有檔案，先備份
+              # 備份原始驅動
               if [ -f "${TARGET_FILE}" ] && [ ! -f "${BACKUP_FILE}" ]; then
                   echo "Backing up original atlantic.ko"
                   cp -p "${TARGET_FILE}" "${BACKUP_FILE}"
               fi
               
-              # 卸載舊驅動（如果已載入）
+              # 卸載舊驅動
               if lsmod | grep -q "^atlantic "; then
                   echo "Unloading old driver..."
-                  rmmod atlantic 2>/dev/null || true
+                  /sbin/rmmod atlantic 2>/dev/null || true
               fi
               
-              # 複製新驅動到系統目錄
+              # 安裝新驅動
               cp -f "${SOURCE_FILE}" "${TARGET_FILE}"
               echo "Driver installed to ${TARGET_FILE}"
               
-              # 載入驅動模組
-              if insmod "${TARGET_FILE}"; then
+              # 載入驅動
+              if /sbin/insmod "${TARGET_FILE}"; then
                   echo "Driver loaded successfully"
               else
-                  echo "Warning: Failed to load driver (may need reboot)"
+                  echo "Warning: Failed to load driver"
               fi
               
-              # 設定開機自動載入
-              if ! grep -q "^atlantic$" /etc/modules 2>/dev/null; then
-                  echo "atlantic" >> /etc/modules
-                  echo "Added to /etc/modules for auto-load on boot"
+              # DSM 7.x 使用 /etc/modules.conf 確保開機自動載入
+              MODULES_CONF="/etc/modules.conf"
+              if [ -f "${MODULES_CONF}" ]; then
+                  # 檔案存在，添加 atlantic
+                  if ! grep -q "^atlantic$" "${MODULES_CONF}"; then
+                      echo "atlantic" >> "${MODULES_CONF}"
+                      echo "Added to ${MODULES_CONF}"
+                  fi
+              else
+                  # 檔案不存在，建立並添加
+                  echo "atlantic" > "${MODULES_CONF}"
+                  chmod 644 "${MODULES_CONF}"
+                  echo "Created ${MODULES_CONF}"
               fi
               
               echo "=== Installation Complete ==="
-              echo "Marvell AQC107 driver (v2.5.12) installed"
-              
-              # 顯示驅動資訊
-              modinfo atlantic 2>/dev/null | grep -E "^(filename|version|description):" || true
+              /sbin/modinfo atlantic 2>/dev/null | head -5 || true
           fi
           exit 0
           POSTEOF
@@ -882,44 +887,33 @@ jobs:
           # 5. 建立卸載前腳本
           cat > scripts/preuninst <<'PREEOF'
           #!/bin/sh
-          # Synology DSM 簡化模組目錄結構
-          
           TARGET_FILE="/lib/modules/atlantic.ko"
           BACKUP_FILE="/lib/modules/atlantic.ko.original"
           
           echo "=== Marvell AQC107 Driver Uninstallation ==="
           
-          # 卸載驅動模組（如果已載入）
+          # 卸載驅動
           if lsmod | grep -q "^atlantic "; then
               echo "Unloading atlantic driver..."
-              if rmmod atlantic 2>/dev/null; then
-                  echo "Driver unloaded successfully"
-              else
-                  echo "Warning: Failed to unload driver (may be in use)"
-              fi
+              /sbin/rmmod atlantic 2>/dev/null || echo "Warning: Failed to unload"
           fi
           
-          # 移除開機自動載入設定
-          if [ -f /etc/modules ]; then
-              sed -i '/^atlantic$/d' /etc/modules
-              echo "Removed from /etc/modules"
+          # 從 /etc/modules.conf 移除（DSM 7.x 使用這個）
+          if [ -f /etc/modules.conf ]; then
+              sed -i '/^atlantic$/d' /etc/modules.conf
+              echo "Removed from /etc/modules.conf"
           fi
           
-          # 還原原始驅動或刪除
+          # 還原或刪除驅動
           if [ -f "${BACKUP_FILE}" ]; then
-              echo "Restoring original driver from backup..."
+              echo "Restoring original driver..."
               mv -f "${BACKUP_FILE}" "${TARGET_FILE}"
-              echo "Original driver restored to ${TARGET_FILE}"
           else
-              # 沒有備份表示原本沒有這個驅動，直接刪除
-              if [ -f "${TARGET_FILE}" ]; then
-                  rm -f "${TARGET_FILE}"
-                  echo "Driver removed from ${TARGET_FILE}"
-              fi
+              [ -f "${TARGET_FILE}" ] && rm -f "${TARGET_FILE}"
+              echo "Driver removed"
           fi
           
           echo "=== Uninstallation Complete ==="
-          echo "Marvell AQC107 driver uninstalled"
           exit 0
           PREEOF
 

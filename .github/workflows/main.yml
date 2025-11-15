@@ -639,9 +639,9 @@ jobs:
           # 下載 kernel 配置檔案（用於 make prepare 階段）
           # 註：此配置不直接影響 atlantic.ko 編譯，僅用於準備 kernel headers
           MY_REPO_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main"
-          curl -L -o aqc107.cfg ${MY_REPO_URL}/kernel-config-append/aqc107.cfg
-          if [ ! -f "aqc107.cfg" ]; then
-            echo "::error::Failed to download aqc107.cfg from repository"
+          curl -L -o aqc.cfg ${MY_REPO_URL}/kernel-config-append/aqc.cfg
+          if [ ! -f "aqc.cfg" ]; then
+            echo "::error::Failed to download aqc.cfg from repository"
             exit 1
           fi
           echo "REPO_URL=${MY_REPO_URL}" >> $GITHUB_ENV
@@ -718,7 +718,7 @@ jobs:
           # 合併自訂配置（啟用 Marvell 支援）
           # 註：這步驟主要用於 make prepare，確保 kernel headers 包含正確配置
           #     實際 atlantic.ko 編譯為外部模組，不受 .config 直接影響
-          scripts/kconfig/merge_config.sh .config ../aqc107.cfg
+          scripts/kconfig/merge_config.sh .config ../aqc.cfg
           yes "" | make oldconfig
 
           # 修改 EXTRAVERSION 以匹配 Synology kernel 版本格式

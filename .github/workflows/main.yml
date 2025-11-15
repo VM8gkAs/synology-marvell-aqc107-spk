@@ -928,16 +928,20 @@ jobs:
           echo "Files to be packaged:"
           find spk/atlantic/files -type f 2>/dev/null || echo "No files directory"
           
-          # 構建 SPK 套件
+          # 構建 SPK 套件 - 在 spk/atlantic 目錄內執行 make
           echo "=== Building SPK package ==="
-          make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} spk-atlantic || {
+          cd spk/atlantic
+          make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} || {
             echo "::error::SPK build failed"
             echo "Build log:"
-            cat spk/atlantic/*.log 2>/dev/null || echo "No log files"
+            find . -name "*.log" -exec cat {} \; 2>/dev/null || echo "No log files"
             exit 1
           }
           
           echo "✓ SPK build completed successfully"
+          
+          # 返回 spksrc 根目錄以便後續步驟查找檔案
+          cd ../..
 
           # === 構建完成，檢查輸出 ===
           echo "=== Build Output Summary ==="

@@ -773,211 +773,191 @@ jobs:
           if-no-files-found: error
 
       # —————————— 開始打包成 SPK ——————————
-      - name: Clone spksrc 框架
-        run: |
-          # git clone --depth 1 ${SPKSRC_REPO} spksrc
-          git clone --branch master --single-branch ${SPKSRC_REPO} spksrc
-
-      - name: 建立 SPK 骨架 and 複製 .ko
+      # ================= SPK 打包 =================
+      - name: 建立 SPK 套件結構
         run: |
           set -ex
           
-          # 1) 切換目錄
-          cd spksrc
-
-          # 2) 建立 driver 套件骨架目錄
-          mkdir -p spk/atlantic
-          mkdir -p spk/atlantic/src
-
-          # 3) 複製我們的套件檔案到 spksrc 框架
-          echo "=== Copying package files ==="
-          echo "Source: ${GITHUB_WORKSPACE}/packages/driver/atlantic/"
-          echo "Target: $(pwd)/spk/atlantic/"
+          # 建立 SPK 工作目錄
+          SPK_BUILD_DIR="${GITHUB_WORKSPACE}/spk-build"
+          mkdir -p "${SPK_BUILD_DIR}"
+          cd "${SPK_BUILD_DIR}"
           
-          # 驗證源目錄存在
-          if [ ! -d "${GITHUB_WORKSPACE}/packages/driver/atlantic" ]; then
-            echo "::error::Source directory does not exist: ${GITHUB_WORKSPACE}/packages/driver/atlantic"
-            exit 1
-          fi
+          echo "=== Creating SPK package structure ==="
           
-          # 顯示源目錄內容
-          echo "Source directory contents:"
-          ls -la "${GITHUB_WORKSPACE}/packages/driver/atlantic/"
+          # 1. 建立套件目錄結構
+          mkdir -p package
+          mkdir -p package/lib/modules
+          mkdir -p scripts
           
-          # 複製 Makefile 和 src 目錄
-          cp "${GITHUB_WORKSPACE}/packages/driver/atlantic/Makefile" spk/atlantic/
-          cp -r "${GITHUB_WORKSPACE}/packages/driver/atlantic/src"/* spk/atlantic/src/
-          
-          echo "Files copied successfully"
-          echo "Target directory contents:"
-          ls -la spk/atlantic/
-
-          # 4) 驗證 .ko 模組存在
-          if [ -z "$KERNEL_VER" ]; then
-            echo "::error::KERNEL_VER is not set"
-            exit 1
-          fi
-          
+          # 2. 複製核心模組
           if [ ! -f "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" ]; then
             echo "::error::Kernel module not found: ${DRIVER_DIR}/${PKG_NAME}/atlantic.ko"
-            echo "Available files:"
-            ls -la "${DRIVER_DIR}/${PKG_NAME}/" || echo "Directory does not exist"
             exit 1
           fi
-
-          # 5) 建立模組目的資料夾並複製
-          mkdir -p "spk/atlantic/files/lib/modules/${KERNEL_VER}"
-          install -D "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
-          echo "Kernel module copied to: spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
           
-          # 驗證複製成功
-          if [ -f "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko" ]; then
-            echo "✓ Kernel module successfully installed"
-            ls -lh "spk/atlantic/files/lib/modules/${KERNEL_VER}/atlantic.ko"
+          cp "${DRIVER_DIR}/${PKG_NAME}/atlantic.ko" package/lib/modules/
+          echo "✓ Kernel module copied"
+          
+          # 3. 建立 INFO 檔案
+          cat > INFO <<'INFOEOF'
+          package="atlantic"
+          version="2.5.12-1"
+          displayname="Marvell AQC107 Atlantic Driver"
+          description="Marvell AQC107 2.5GbE/5GbE/10GbE Network Driver for Synology NAS"
+          maintainer="VM8gkAs"
+          maintainer_url="https://github.com/VM8gkAs/synology-marvell-aqc107-spk"
+          distributor="VM8gkAs"
+          distributor_url="https://github.com/VM8gkAs/synology-marvell-aqc107-spk"
+          support_url="https://github.com/VM8gkAs/synology-marvell-aqc107-spk/issues"
+          startable="no"
+          silent_install="yes"
+          silent_uninstall="yes"
+          silent_upgrade="yes"
+          thirdparty="yes"
+          INFOEOF
+          
+          # 替換變數
+          sed -i "s/atlantic/${PKG_NAME}/g" INFO
+          sed -i "s/2.5.12-1/${PKG_VERSION}-1/g" INFO
+          sed -i "s/displayname=\".*\"/displayname=\"Marvell AQC107 Atlantic Driver\"/" INFO
+          echo "arch=\"${CPU_SERIES}\"" >> INFO
+          echo "firmware=\"${DSM_VER_FULL}\"" >> INFO
+          echo "os_min_ver=\"7.0-40000\"" >> INFO
+          
+          echo "✓ INFO file created"
+          cat INFO
+          
+          # 4. 建立安裝後腳本
+          cat > scripts/postinst <<'POSTEOF'
+          #!/bin/sh
+          # Synology DSM 使用簡化的模組目錄結構：/lib/modules/*.ko
+          # 而非標準 Linux 的 /lib/modules/$(uname -r)/kernel/drivers/...
+          
+          if [ -f "/var/packages/atlantic/target/lib/modules/atlantic.ko" ]; then
+              TARGET_FILE="/lib/modules/atlantic.ko"
+              BACKUP_FILE="/lib/modules/atlantic.ko.original"
+              SOURCE_FILE="/var/packages/atlantic/target/lib/modules/atlantic.ko"
+              
+              echo "=== Marvell AQC107 Driver Installation ==="
+              
+              # 如果原本就有檔案，先備份
+              if [ -f "${TARGET_FILE}" ] && [ ! -f "${BACKUP_FILE}" ]; then
+                  echo "Backing up original atlantic.ko"
+                  cp -p "${TARGET_FILE}" "${BACKUP_FILE}"
+              fi
+              
+              # 卸載舊驅動（如果已載入）
+              if lsmod | grep -q "^atlantic "; then
+                  echo "Unloading old driver..."
+                  rmmod atlantic 2>/dev/null || true
+              fi
+              
+              # 複製新驅動到系統目錄
+              cp -f "${SOURCE_FILE}" "${TARGET_FILE}"
+              echo "Driver installed to ${TARGET_FILE}"
+              
+              # 載入驅動模組
+              if insmod "${TARGET_FILE}"; then
+                  echo "Driver loaded successfully"
+              else
+                  echo "Warning: Failed to load driver (may need reboot)"
+              fi
+              
+              # 設定開機自動載入
+              if ! grep -q "^atlantic$" /etc/modules 2>/dev/null; then
+                  echo "atlantic" >> /etc/modules
+                  echo "Added to /etc/modules for auto-load on boot"
+              fi
+              
+              echo "=== Installation Complete ==="
+              echo "Marvell AQC107 driver (v2.5.12) installed"
+              
+              # 顯示驅動資訊
+              modinfo atlantic 2>/dev/null | grep -E "^(filename|version|description):" || true
+          fi
+          exit 0
+          POSTEOF
+          
+          # 5. 建立卸載前腳本
+          cat > scripts/preuninst <<'PREEOF'
+          #!/bin/sh
+          # Synology DSM 簡化模組目錄結構
+          
+          TARGET_FILE="/lib/modules/atlantic.ko"
+          BACKUP_FILE="/lib/modules/atlantic.ko.original"
+          
+          echo "=== Marvell AQC107 Driver Uninstallation ==="
+          
+          # 卸載驅動模組（如果已載入）
+          if lsmod | grep -q "^atlantic "; then
+              echo "Unloading atlantic driver..."
+              if rmmod atlantic 2>/dev/null; then
+                  echo "Driver unloaded successfully"
+              else
+                  echo "Warning: Failed to unload driver (may be in use)"
+              fi
+          fi
+          
+          # 移除開機自動載入設定
+          if [ -f /etc/modules ]; then
+              sed -i '/^atlantic$/d' /etc/modules
+              echo "Removed from /etc/modules"
+          fi
+          
+          # 還原原始驅動或刪除
+          if [ -f "${BACKUP_FILE}" ]; then
+              echo "Restoring original driver from backup..."
+              mv -f "${BACKUP_FILE}" "${TARGET_FILE}"
+              echo "Original driver restored to ${TARGET_FILE}"
           else
-            echo "::error::Failed to copy kernel module"
-            exit 1
-          fi
-
-          # 6) 更新版本號
-          sed -i "s/^SPK_VERS.*/SPK_VERS = ${PKG_VERSION}/" spk/atlantic/Makefile
-          
-          echo "=== SPK skeleton setup complete ==="
-
-      - name: 下載工具鏈 (一次性節省後續 cache)
-        run: |
-          cd spksrc
-          make setup
-
-      - name: 建置 .spk
-        id: build-spk
-        run: |
-          # 1) 切換目錄
-          cd spksrc
-          # 2) TCVERSION - DSM 主版號 7.x, arch - CPU 架構
-          TCVERSION=${DSM_TAG%-*}
-
-          # 3) 映射架構名稱到 spksrc 格式
-          # spksrc 使用具體的 CPU 架構名稱，而非通用名稱
-          case "${CPU_SERIES}" in
-            # DSM 7.2 CPU 系列
-            "v1000")
-              SPKSRC_ARCH="v1000"
-              ;;
-            "geminilake")
-              SPKSRC_ARCH="geminilake"
-              ;;
-            "apollolake")
-              SPKSRC_ARCH="apollolake"
-              ;;
-            "kvmx64")
-              SPKSRC_ARCH="kvmx64"
-              ;;
-            "denverton")
-              SPKSRC_ARCH="denverton"
-              ;;
-            "broadwell")
-              SPKSRC_ARCH="broadwell"
-              ;;
-            "braswell")
-              SPKSRC_ARCH="braswell"
-              ;;
-            "cedarview")
-              SPKSRC_ARCH="cedarview"
-              ;;
-            "evansport")
-              SPKSRC_ARCH="evansport"
-              ;;
-            "grantley")
-              SPKSRC_ARCH="grantley"
-              ;;
-            "purley")
-              SPKSRC_ARCH="purley"
-              ;;
-            "dockerx64")
-              SPKSRC_ARCH="dockerx64"
-              ;;
-            # DSM 7.3 CPU 系列 (nk variants)
-            "v1000nk")
-              SPKSRC_ARCH="v1000nk"
-              ;;
-            "r1000nk")
-              SPKSRC_ARCH="r1000nk"
-              ;;
-            "geminilakenk")
-              SPKSRC_ARCH="geminilakenk"
-              ;;
-            *)
-              # 對於未知的 CPU 系列，使用 CPU_SERIES 作為備用
-              SPKSRC_ARCH="${CPU_SERIES}"
-              ;;
-          esac
-
-          echo "SPKSRC_ARCH=${SPKSRC_ARCH}" >> $GITHUB_OUTPUT
-          echo "Building with TCVERSION=${TCVERSION}, ARCH=${ARCH}, CPU_SERIES=${CPU_SERIES}, SPKSRC_ARCH=${SPKSRC_ARCH}"
-
-          # 驗證 SPK 套件目錄存在
-          if [ ! -f "spk/atlantic/Makefile" ]; then
-            echo "::error::Atlantic package Makefile not found"
-            ls -la spk/ 2>/dev/null || echo "No spk directory"
-            exit 1
+              # 沒有備份表示原本沒有這個驅動，直接刪除
+              if [ -f "${TARGET_FILE}" ]; then
+                  rm -f "${TARGET_FILE}"
+                  echo "Driver removed from ${TARGET_FILE}"
+              fi
           fi
           
-          echo "=== SPK package structure ==="
-          ls -la spk/atlantic/
-          echo "Files to be packaged:"
-          find spk/atlantic/files -type f 2>/dev/null || echo "No files directory"
-          
-          # 構建 SPK 套件 - 在 spk/atlantic 目錄內執行 make
-          echo "=== Building SPK package ==="
-          cd spk/atlantic
-          make ARCH=${SPKSRC_ARCH} TCVERSION=${TCVERSION} || {
-            echo "::error::SPK build failed"
-            echo "Build log:"
-            find . -name "*.log" -exec cat {} \; 2>/dev/null || echo "No log files"
-            exit 1
-          }
-          
-          echo "✓ SPK build completed successfully"
-          
-          # 返回 spksrc 根目錄以便後續步驟查找檔案
-          cd ../..
+          echo "=== Uninstallation Complete ==="
+          echo "Marvell AQC107 driver uninstalled"
+          exit 0
+          PREEOF
 
-          # === 構建完成，檢查輸出 ===
-          echo "=== Build Output Summary ==="
-          echo "Package: ${PKG_NAME} ${PKG_VERSION}"
-          echo "Device: ${DEVICE}"
-          echo "CPU Series: ${CPU_SERIES}"
-          echo "DSM Version: ${DSM_VER_FULL}"
-          echo "Kernel: ${KERNEL_VER}"
-          echo "Architecture: ${SPKSRC_ARCH}"
-          echo "==========================="
+          chmod +x scripts/*
+          echo "✓ Install/uninstall scripts created"
           
-          # 搜尋 SPK 檔案
-          echo "\n=== Searching for SPK files ==="
-          SPK_FOUND=false
-          
-          # 檢查所有可能的輸出位置
-          for dir in "packages/${SPKSRC_ARCH}" "packages/all" "spk/atlantic/work-${SPKSRC_ARCH}" "."; do
-            if find "$dir" -name "*atlantic*.spk" -type f 2>/dev/null | grep -q .; then
-              echo "✓ Found SPK in: $dir"
-              find "$dir" -name "*atlantic*.spk" -type f -ls
-              SPK_FOUND=true
-            fi
-          done
-          
-          if [ "$SPK_FOUND" = "false" ]; then
-            echo "::warning::No SPK files found, listing all directories:"
-            find . -type d -name "*${SPKSRC_ARCH}*" 2>/dev/null || echo "No arch-specific directories"
-            find . -name "*.spk" -type f 2>/dev/null || echo "No .spk files anywhere"
+          # 6. 複製套件圖示（如果存在）
+          if [ -f "${GITHUB_WORKSPACE}/packages/driver/atlantic/src/atlantic.png" ]; then
+            cp "${GITHUB_WORKSPACE}/packages/driver/atlantic/src/atlantic.png" PACKAGE_ICON.PNG
+            echo "✓ Package icon copied"
           fi
+          
+          # 7. 打包 package.tgz
+          tar -czf package.tgz -C package .
+          echo "✓ package.tgz created"
+          
+          # 8. 打包 scripts (不壓縮)
+          tar -cf scripts.tar -C scripts .
+          echo "✓ scripts.tar created"
+          
+          # 9. 建立最終 SPK 檔案
+          SPK_FILENAME="${PKG_NAME}-${PKG_VERSION}-${DSM_VER_FULL}-${CPU_SERIES}_1.spk"
+          
+          tar -cf "${SPK_FILENAME}" INFO package.tgz scripts.tar
+          if [ -f PACKAGE_ICON.PNG ]; then
+            tar -rf "${SPK_FILENAME}" PACKAGE_ICON.PNG
+          fi
+          
+          echo "✓ SPK package created: ${SPK_FILENAME}"
+          ls -lh "${SPK_FILENAME}"
+          
+          echo "=== SPK Contents ==="
+          tar -tvf "${SPK_FILENAME}"
 
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ matrix.dsm_ver }}-${{ matrix.cpu_series }}_1"
           path: |
-            spksrc/packages/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/*atlantic*.spk
-            spksrc/packages/all/*atlantic*.spk
-            spksrc/**/*atlantic*.spk
+            ${{ github.workspace }}/spk-build/*.spk
           if-no-files-found: error

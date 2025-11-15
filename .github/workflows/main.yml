@@ -201,6 +201,9 @@ jobs:
       DRIVER_DIR: ${{ github.workspace }}/driver-${{ matrix.device }}
     steps:
       # —————————— 準備 ——————————
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Initialize Folder
         run: |
           # ————— 建立目錄 —————
@@ -765,7 +768,7 @@ jobs:
       - name: 上傳 .ko 模組為 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.DSM_TAG }}-${{ matrix.cpu_series }}-ko
+          name: ${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ matrix.dsm_ver }}-${{ matrix.cpu_series }}-ko
           path: ${{ env.DRIVER_DIR }}/${{ env.PKG_NAME }}/*.ko
           if-no-files-found: error
 
@@ -958,7 +961,7 @@ jobs:
       - name: 上傳產出的 .spk
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ env.DSM_TAG }}-${{ matrix.cpu_series }}_1"
+          name: "${{ env.PKG_NAME }}-${{ env.PKG_VERSION }}-${{ matrix.dsm_ver }}-${{ matrix.cpu_series }}_1"
           path: |
             spksrc/output/${{ steps.build-spk.outputs.SPKSRC_ARCH }}/*.spk
             spksrc/output/*/*.spk

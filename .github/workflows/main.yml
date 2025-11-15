@@ -636,14 +636,14 @@ jobs:
       # —————————— 下載並解壓 ——————————
       - name: Download essential files from GitHub Repository
         run: |
-          # 1) 設定 REPO_URL 並下載 aqc107.cfg
+          # 下載 kernel 配置檔案（用於 make prepare 階段）
+          # 註：此配置不直接影響 atlantic.ko 編譯，僅用於準備 kernel headers
           MY_REPO_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main"
           curl -L -o aqc107.cfg ${MY_REPO_URL}/kernel-config-append/aqc107.cfg
           if [ ! -f "aqc107.cfg" ]; then
             echo "::error::Failed to download aqc107.cfg from repository"
             exit 1
           fi
-          # 2) 宣告 REPO_URL
           echo "REPO_URL=${MY_REPO_URL}" >> $GITHUB_ENV
 
       - name: Synology 內核原始碼 Source (25/06/11)
@@ -703,28 +703,29 @@ jobs:
 
       - name: 啟動 Synology 內核編譯功能
         run: |
-          # 1) 宣告環境變數 TOOLCHAIN_DIR 和 CROSS_COMPILE
+          # 設定交叉編譯環境變數
           echo "KERNEL_SRC=${PWD}/linux-${KERNEL_VER_SERIES}.x" >> $GITHUB_ENV
           echo "TOOLCHAIN_DIR=${PWD}/${ARCH_FINDED}-pc-linux-gnu/" >> $GITHUB_ENV
-          # CROSS_COMPILE_PATH="${PWD}/${ARCH}-pc-linux-gnu/bin/${ARCH}-pc-linux-gnu-"
-          # echo "CROSS_COMPILE_ENV=${CROSS_COMPILE_PATH}" >> $GITHUB_ENV
           echo "CROSS_COMPILE=${PWD}/${ARCH_FINDED}-pc-linux-gnu/bin/${ARCH_FINDED}-pc-linux-gnu-" >> $GITHUB_ENV
-          echo "${PWD}/${ARCH_FINDED}-pc-linux-gnu/bin" >> $GITHUB_PATH     # gcc 放進 PATH
+          echo "${PWD}/${ARCH_FINDED}-pc-linux-gnu/bin" >> $GITHUB_PATH
 
-          # 2) 切換目錄
+          # 準備 kernel 編譯環境
           cd linux-${KERNEL_VER_SERIES}.x
 
-          # 3) 拷貝官方 synoconfigs 基礎 config
+          # 複製 Synology 官方 kernel 配置
           cp synoconfigs/${CPU_SERIES} .config
 
-          # 4) 用 merge_config.sh 合併你的 cfg
+          # 合併自訂配置（啟用 Marvell 支援）
+          # 註：這步驟主要用於 make prepare，確保 kernel headers 包含正確配置
+          #     實際 atlantic.ko 編譯為外部模組，不受 .config 直接影響
           scripts/kconfig/merge_config.sh .config ../aqc107.cfg
-          yes "" | make oldconfig      # 自動答預設
+          yes "" | make oldconfig
 
-          # 5) 修改 Makefile ( EXTRAVERSION = to EXTRAVERSION = + )
+          # 修改 EXTRAVERSION 以匹配 Synology kernel 版本格式
           sed -i "s/EXTRAVERSION = /EXTRAVERSION = +/g" Makefile
 
-          # 6) 準備編譯
+          # 準備 kernel headers 和編譯工具
+          # 這些步驟為外部模組編譯準備必要的檔案和腳本
           echo "DEBUG: About to use KERNEL_ARCH='$KERNEL_ARCH' for kernel build"
           if [ -z "$KERNEL_ARCH" ]; then
             echo "::warning::KERNEL_ARCH is empty, setting to x86"
@@ -733,17 +734,16 @@ jobs:
           export ARCH=${KERNEL_ARCH}
           echo "Building kernel with ARCH=${ARCH}"
           make clean
-          # make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE_PATH} prepare
-          # make -j$(nproc) CROSS_COMPILE=${CROSS_COMPILE_PATH} scripts
-          make -j$(nproc) prepare
-          make -j$(nproc) scripts
+          make -j$(nproc) prepare    # 生成必要的標頭檔
+          make -j$(nproc) scripts    # 編譯 kernel 輔助腳本
 
-      - name: 編譯模組 AQC107
+      - name: 編譯模組 Atlantic
         run: |
-          # 1) 切換目錄 
+          # 切換到驅動源碼目錄
           cd ${DRIVER_DIR}/${PKG_NAME}/
 
-          # 2) aq_compat.h 處理 page_ref_count
+          # 修復 aq_compat.h 的 page_ref_count 相容性問題
+          # Synology kernel 已內建此函數，移除驅動的 fallback 定義避免衝突
           FILE="${DRIVER_DIR}/${PKG_NAME}/aq_compat.h"
           if [ -f "$FILE" ]; then
             sed -i '/static inline int page_ref_count/,/^#endif/c #endif /* page_ref_count fallback removed */' "$FILE"
@@ -751,7 +751,9 @@ jobs:
             echo "::warning::aq_compat.h not found, skipping page_ref_count fix"
           fi
 
-          # 3) 編譯
+          # 編譯外部模組
+          # 使用 M=$PWD 指定外部模組路徑，驅動將使用自己的 Makefile
+          # 這與 kernel .config 無關，僅依賴 kernel headers
           if [ -z "$KERNEL_SRC" ]; then
             echo "::error::KERNEL_SRC is not set, cannot compile module"
             exit 1

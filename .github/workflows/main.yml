@@ -1,4 +1,4 @@
-name: Build & Package Marvell AQC107 2.5.12 Driver
+name: Build & Package Marvell Atlantic Driver (AQC Series)
 
 on:
   push:
@@ -803,13 +803,13 @@ jobs:
           cat > INFO <<'INFOEOF'
           package="atlantic"
           version="2.5.12-1"
-          displayname="Marvell AQC107 Atlantic Driver"
-          description="Marvell AQC107 2.5GbE/5GbE/10GbE Network Driver for Synology NAS"
+          displayname="Marvell Atlantic Driver (AQC Series)"
+          description="Marvell Atlantic Driver for AQC100/107/108/109/111/112/113/114/115/116 Series Multi-Gigabit Network Adapters"
           maintainer="VM8gkAs"
-          maintainer_url="https://github.com/VM8gkAs/synology-marvell-aqc107-spk"
+          maintainer_url="https://github.com/VM8gkAs/synology-atlantic-driver"
           distributor="VM8gkAs"
-          distributor_url="https://github.com/VM8gkAs/synology-marvell-aqc107-spk"
-          support_url="https://github.com/VM8gkAs/synology-marvell-aqc107-spk/issues"
+          distributor_url="https://github.com/VM8gkAs/synology-atlantic-driver"
+          support_url="https://github.com/VM8gkAs/synology-atlantic-driver/issues"
           startable="no"
           silent_install="yes"
           silent_uninstall="yes"
@@ -838,7 +838,7 @@ jobs:
               BACKUP_FILE="/lib/modules/atlantic.ko.original"
               SOURCE_FILE="/var/packages/atlantic/target/lib/modules/atlantic.ko"
               
-              echo "=== Marvell AQC107 Driver Installation ==="
+              echo "=== Marvell Atlantic Driver Installation ==="
               
               # 備份原始驅動
               if [ -f "${TARGET_FILE}" ] && [ ! -f "${BACKUP_FILE}" ]; then
@@ -890,7 +890,7 @@ jobs:
           TARGET_FILE="/lib/modules/atlantic.ko"
           BACKUP_FILE="/lib/modules/atlantic.ko.original"
           
-          echo "=== Marvell AQC107 Driver Uninstallation ==="
+          echo "=== Marvell Atlantic Driver Uninstallation ==="
           
           # 卸載驅動
           if lsmod | grep -q "^atlantic "; then

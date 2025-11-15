@@ -1,10 +1,21 @@
-# Synology Marvell AQC107 Driver SPK
+# Synology Marvell Atlantic Driver (AQC Series)
 
-本倉庫提供了一個完整的 GitHub Actions 流程，自動：
+本倉庫提供了一個完整的 GitHub Actions 流程，自動編譯並打包 **Marvell Atlantic 驅動程式** (支援 AQC100/107/108/109/111/112/113/114/115/116 全系列) 為 Synology DSM 7.x 原生 SPK 套件。
+
+## 支援的網卡型號
+
+驅動程式支援以下 Marvell AQC 系列網卡：
+- **AQC100** 系列 - 1GbE
+- **AQC107/108/109** 系列 - 10GbE/5GbE/2.5GbE
+- **AQC111/112** 系列 - 5GbE/2.5GbE  
+- **AQC113/114/115/116** 系列 - 最新一代多速率網卡
+- **S/C 後綴變體** - Server/OEM 特殊版本
+
+## 自動化流程
 
 1. 下載並解壓 Synology 官方交叉編譯工具鏈與內核原始碼  
-2. 下載並編譯 Marvell AQC107 (atlantic) 驅動模組  
-3. 使用 Synology 官方 spksrc 框架，將編譯好的 `atlantic.ko` 打包成 DSM 原生 SPK 套件  
+2. 下載並編譯 Marvell Atlantic 2.5.12 驅動模組  
+3. 將編譯好的 `atlantic.ko` 打包成 DSM 原生 SPK 套件  
 4. 將產物（`.ko` 與 `.spk`）作為 Actions Artifact 發布  
 
 ---
@@ -31,7 +42,7 @@
    - `DSM_TAG`  
    - `KERNEL_VER`  
    - …  
-3. Push 到 `main` 分支，或手動在 Actions 面板觸發 “Build & Package Marvell AQC107 Driver”  
+3. Push 到 `main` 分支，或手動在 Actions 面板觸發 "Build & Package Marvell Atlantic Driver"  
 4. 編譯完成後，在對應的 Workflow Run 頁面下載 `.spk`，直接拖入 DSM「套件中心」→「手動安裝」
 
 ---

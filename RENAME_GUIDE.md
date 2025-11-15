@@ -16,14 +16,14 @@
 
 #### 1. GitHub 儲存庫重新命名
 
-**建議的新名稱：** `synology-atlantic-driver`
+**建議的新名稱：** `synology-atlantic-driver-spk`
 
 **操作步驟：**
 
 1. 前往 GitHub 儲存庫首頁
 2. 點擊 **Settings**（設定）
 3. 在 **General** 區段找到 **Repository name**
-4. 將名稱從 `synology-marvell-aqc107-spk` 改為 `synology-atlantic-driver`
+4. 將名稱從 `synology-marvell-aqc107-spk` 改為 `synology-atlantic-driver-spk`
 5. 點擊 **Rename** 按鈕
 
 **GitHub 會自動：**
@@ -38,7 +38,7 @@
 git remote -v
 
 # 更新為新的儲存庫名稱
-git remote set-url origin https://github.com/VM8gkAs/synology-atlantic-driver.git
+git remote set-url origin https://github.com/VM8gkAs/synology-atlantic-driver-spk.git
 
 # 驗證更新
 git remote -v
@@ -60,7 +60,7 @@ git remote -v
 
 | 項目 | 舊名稱 | 新名稱 |
 |------|--------|--------|
-| GitHub Repo | `synology-marvell-aqc107-spk` | `synology-atlantic-driver` |
+| GitHub Repo | `synology-marvell-aqc107-spk` | `synology-atlantic-driver-spk` |
 | README 標題 | Synology Marvell AQC107 Driver SPK | Synology Marvell Atlantic Driver (AQC Series) |
 | Workflow 名稱 | Build & Package Marvell AQC107 2.5.12 Driver | Build & Package Marvell Atlantic Driver (AQC Series) |
 | SPK Display Name | Marvell AQC107 Atlantic Driver | Marvell Atlantic Driver (AQC Series) |
